@@ -256,6 +256,8 @@ function Player(game, x, y) {
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
     this.shadowOffsetY = 0.25;  //pixels per height
+    this.map = new Map(game, this);
+    this.game.addEntity(this.map);
     this.shadow = new PlayerShadow(game, this);
     this.game.addEntity(this.shadow);
     this.playerSprite = new PlayerSprite(game, this);
@@ -266,22 +268,22 @@ Player.prototype.constructor = Player;
 
 Player.prototype.draw = function (ctx) {
     var ctx = this.game.ctx;
-    var gradient = ctx.createLinearGradient(this.x, this.y, this.x, this.playerSprite.y);
-    gradient.addColorStop(0, "orange");
-    gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
-    ctx.strokeStyle = gradient;
-    ctx.moveTo(this.x, this.y);
-    ctx.lineTo(this.playerSprite.x, this.playerSprite.y);
-    ctx.stroke();
+    // var gradient = ctx.createLinearGradient(this.x, this.y, this.x, this.playerSprite.y);
+    // gradient.addColorStop(0, "orange");
+    // gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
+    // ctx.strokeStyle = gradient;
+    // ctx.moveTo(this.x, this.y);
+    // ctx.lineTo(this.playerSprite.x, this.playerSprite.y);
+    // ctx.stroke();
 
-    ctx.beginPath();
-    gradient = ctx.createLinearGradient(this.x, this.y, this.shadow.x, this.shadow.y);
-    gradient.addColorStop(0, "blue");
-    gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
-    ctx.strokeStyle = gradient;
-    ctx.moveTo(this.x, this.y);
-    ctx.lineTo(this.shadow.x, this.shadow.y);
-    ctx.stroke();
+    // ctx.beginPath();
+    // gradient = ctx.createLinearGradient(this.x, this.y, this.shadow.x, this.shadow.y);
+    // gradient.addColorStop(0, "blue");
+    // gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
+    // ctx.strokeStyle = gradient;
+    // ctx.moveTo(this.x, this.y);
+    // ctx.lineTo(this.shadow.x, this.shadow.y);
+    // ctx.stroke();
 
     var r = 10;
     ctx.beginPath();
@@ -290,10 +292,13 @@ Player.prototype.draw = function (ctx) {
     } else {
         ctx.strokeStyle = "rgba(255,0,0,0.5)";
     }
-    ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
-    ctx.moveTo(this.x, this.y);
-    ctx.lineTo(this.x + r * Math.cos(this.a), this.y + r * Math.sin(this.a));
+    ctx.arc(this.playerSprite.x, this.playerSprite.y, r, 0, Math.PI * 2);
+    ctx.moveTo(this.playerSprite.x, this.playerSprite.y);
+    ctx.lineTo(this.playerSprite.x + r * Math.cos(this.a), this.playerSprite.y + r * Math.sin(this.a));
     ctx.stroke();
+
+    ctx.fillText("X: " + this.x, this.playerSprite.x, this.playerSprite.y - 30);
+    ctx.fillText("Y: " + this.y, this.playerSprite.x, this.playerSprite.y - 15);
 }
 
 Player.prototype.update = function () {
@@ -366,49 +371,69 @@ Player.prototype.update = function () {
 
 Player.prototype.move = function (dx, dy) {
     this.x += dx;
-    this.playerSprite.x += dx;
-    this.shadow.x += dx;
+    // this.playerSprite.x += dx;
+    // this.shadow.x += dx;
 
     this.y += dy;
-    this.playerSprite.y += dy;
-    this.shadow.y += dy;
+    // this.playerSprite.y += dy;
+    // this.shadow.y += dy;
 }
 
 
 function PlayerSprite(game, player) {
     Entity.call(this, game, ASSET_MANAGER.getAsset("images/test.png"),
         player.x, player.y + player.h * player.heightOffset);
+    this.player = player;
 }
 PlayerSprite.prototype = new Entity();
 PlayerSprite.prototype.constructor = PlayerSprite;
 
 PlayerSprite.prototype.update = function () {
-    if (this.isOutsideScreen()) {
-        this.wrapAroundScreen();
-    }
+    // if (this.isOutsideScreen()) {
+    //     this.wrapAroundScreen();
+    // }
+    this.x = this.game.ctx.canvas.width / 2;
+    this.y = this.game.ctx.canvas.height / 2 + this.player.h * this.player.heightOffset;
 }
 
 
 function PlayerShadow(game, player) {
     Entity.call(this, game, ASSET_MANAGER.getAsset("images/test_shadow.png"),
         player.x + player.h * player.shadowOffsetX, player.y + player.h * player.shadowOffsetY);
+    this.player = player;
 }
 PlayerShadow.prototype = new Entity();
 PlayerShadow.prototype.constructor = PlayerShadow;
 
 PlayerShadow.prototype.update = function () {
-    if (this.isOutsideScreen()) {
-        this.wrapAroundScreen();
-    }
+    // if (this.isOutsideScreen()) {
+    //     this.wrapAroundScreen();
+    // }
+    this.x = this.game.ctx.canvas.width / 2 + this.player.h * this.player.shadowOffsetX;
+    this.y = this.game.ctx.canvas.height / 2 + this.player.h * this.player.shadowOffsetY;
+
 }
 
+function Map(game, player) {
+    this.player = player;
+    this.offsetX = -3600;
+    this.offsetY = -2600;
+    Entity.call(this, game, ASSET_MANAGER.getAsset("images/map.gif"),
+        player.x + this.offsetX, player.y + this.offsetY, 0);
+}
 
-
+Map.prototype = new Entity();
+Map.prototype.constructor = Map;
+Map.prototype.update = function () {
+    this.x = this.offsetX - this.player.x;
+    this.y = this.offsetY - this.player.y;
+}
 
 var ASSET_MANAGER = new AssetManager();
 
 ASSET_MANAGER.queueDownload("images/test.png");
 ASSET_MANAGER.queueDownload("images/test_shadow.png");
+ASSET_MANAGER.queueDownload("images/map.gif");
 ASSET_MANAGER.downloadAll(function () {
     console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
 
