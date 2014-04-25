@@ -256,34 +256,32 @@ function Player(game, x, y) {
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
     this.shadowOffsetY = 0.25;  //pixels per height
-    this.map = new Map(game, this);
-    this.game.addEntity(this.map);
+    //this.map = new Map(game, this);
+    //this.game.addEntity(this.map);
     this.shadow = new PlayerShadow(game, this);
-    this.game.addEntity(this.shadow);
     this.playerSprite = new PlayerSprite(game, this);
-    this.game.addEntity(this.playerSprite);
 }
 Player.prototype = new Entity();
 Player.prototype.constructor = Player;
 
 Player.prototype.draw = function (ctx) {
     var ctx = this.game.ctx;
-    // var gradient = ctx.createLinearGradient(this.x, this.y, this.x, this.playerSprite.y);
-    // gradient.addColorStop(0, "orange");
-    // gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
-    // ctx.strokeStyle = gradient;
-    // ctx.moveTo(this.x, this.y);
-    // ctx.lineTo(this.playerSprite.x, this.playerSprite.y);
-    // ctx.stroke();
+    var gradient = ctx.createLinearGradient(this.x, this.y, this.x, this.playerSprite.y);
+    gradient.addColorStop(0, "orange");
+    gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
+    ctx.strokeStyle = gradient;
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(this.playerSprite.x, this.playerSprite.y);
+    ctx.stroke();
 
-    // ctx.beginPath();
-    // gradient = ctx.createLinearGradient(this.x, this.y, this.shadow.x, this.shadow.y);
-    // gradient.addColorStop(0, "blue");
-    // gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
-    // ctx.strokeStyle = gradient;
-    // ctx.moveTo(this.x, this.y);
-    // ctx.lineTo(this.shadow.x, this.shadow.y);
-    // ctx.stroke();
+    ctx.beginPath();
+    gradient = ctx.createLinearGradient(this.x, this.y, this.shadow.x, this.shadow.y);
+    gradient.addColorStop(0, "blue");
+    gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
+    ctx.strokeStyle = gradient;
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(this.shadow.x, this.shadow.y);
+    ctx.stroke();
 
     var r = 10;
     ctx.beginPath();
@@ -429,16 +427,108 @@ Map.prototype.update = function () {
     this.y = this.offsetY - this.player.y;
 }
 
+function TileMap(game, player) {
+    Entity.call(this, game, ASSET_MANAGER.getAsset("images/map_tiles.png"));
+    this.player = player;
+    this.imgCache = null;
+    this.tilePixelWidth = 38;  //How wide an individual tile is on the sprite sheet
+    this.tilePixelHeight = 28; //How high an individual tile is on the sprite sheet
+    this.tileMapWidth = 38;    //How wide an individual tile is on the game canvas
+    this.tileMapHeight = 20;   //How high an individual tile is on the game canvas
+    this.tileMapDepth = 5;     //How deep an individual tile is on the game canvas
+    //this.drawInit(this.game.ctx);
+}
+TileMap.prototype = new Entity();
+TileMap.prototype.constructor = TileMap;
+
+TileMap.prototype.update = function () {
+    this.x = this.player.x;
+    this.y = this.player.y;
+}
+
+TileMap.prototype.drawInit = function (ctx) {
+    this.drawMap(ctx);
+    this.imgCache = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+}
+
+TileMap.prototype.drawMap = function (ctx) {
+    //x, y for canvas coordinates
+    //i, j for tile coordinates
+    var j = this.y;
+    if (j < 0) {
+        var temp = this.tileMapHeight * gameMap.length;
+        //j = Math.floor(Math.abs(temp + this.y % temp) / this.tileMapHeight);
+        j = gameMap.length + Math.ceil(this.y / this.tileMapHeight) % gameMap.length;
+    } else {
+        j = Math.floor(this.y / this.tileMapHeight);
+    }
+    for (y = -this.y % this.tileMapHeight / this.tileMapHeight - this.tileMapHeight;
+        (y - 2) * this.tileMapHeight / 2 < this.game.ctx.canvas.height;
+        y++, j++) {
+        var skew = Math.floor(j % 2) !== 0;
+        var i = this.x;
+        if (i < 0) {
+            var temp = this.tileMapWidth * gameMap[j % gameMap.length].length;
+            //i = Math.floor(Math.abs(temp + this.x % temp) / this.tileMapWidth);
+            i = gameMap[j % gameMap.length].length + Math.ceil(this.x / this.tileMapWidth) % gameMap[j % gameMap.length].length;
+        } else {
+            i = Math.floor(this.x / this.tileMapWidth);
+        }
+        for (x = -this.x % this.tileMapWidth / this.tileMapWidth - this.tileMapWidth;
+            (x - 1) * this.tileMapWidth < this.game.ctx.canvas.width;
+            x++, i++) {
+            var tileID = gameMap[j % gameMap.length][i % gameMap[j % gameMap.length].length];
+            ctx.drawImage(this.img,
+                          tileID * this.tilePixelWidth, 0,
+                          this.tilePixelWidth, this.tilePixelHeight,
+                          this.tileMapWidth * (skew / 2 + x - 1), (y - 1) * this.tileMapHeight / 2,
+                          this.tilePixelWidth, this.tilePixelHeight);
+        }
+        skew = !skew;
+    }
+}
+
+TileMap.prototype.draw = function (ctx) {
+    //if (this.imgCache) {
+    //    //ctx.putImageData(this.imgCache, 0, 0);
+    //    ctx.drawImage(this.imgCache, 0, 0);
+    //} else {
+       // console.log("drawing on canvas");
+        this.drawMap(ctx);
+        ////this.imgCache = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+        //var url = ctx.canvas.toDataURL();
+        //this.imgCache = new Image();
+        //this.imgCache.src = url;
+    //}
+}
+
+var gameMap = [
+    [0, 0, 0, 0, 0, 0],
+     [0, 0, 1, 0, 0, 0],
+    [0, 0, 1, 0, 0, 0],
+     [0, 0, 1, 0, 0, 0],
+    [0, 0, 0, 1, 0, 0],
+     [0, 0, 0, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0],
+     [0, 0, 0, 0, 0, 0]
+];
+
+
+
 var ASSET_MANAGER = new AssetManager();
 
 ASSET_MANAGER.queueDownload("images/test.png");
 ASSET_MANAGER.queueDownload("images/test_shadow.png");
 ASSET_MANAGER.queueDownload("images/map.gif");
+ASSET_MANAGER.queueDownload("images/map_tiles.png");
 ASSET_MANAGER.downloadAll(function () {
-    console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
-
+    //console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
-    engine.addEntity(new Player(engine, 100, 200));
+    var player = new Player(engine, 50, 50)
+    engine.addEntity(new TileMap(engine, player));
+    engine.addEntity(player);
+    engine.addEntity(player.shadow);
+    engine.addEntity(player.playerSprite);
     engine.start();
 });
