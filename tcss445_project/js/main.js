@@ -9,6 +9,28 @@
             });
 })();
 
+window.requestFullScreen = function () {
+    //check to see if fullscreen is enabled.
+    if (document.fullscreenEnabled ||
+        document.webkitFullscreenEnabled ||
+        document.mozFullScreenEnabled ||
+        document.msFullscreenEnabled) {
+
+        var i = document.getElementById("canvasWrapper");
+
+        // go full-screen
+        if (i.requestFullscreen) {              //W3 standard
+            i.requestFullscreen();
+        } else if (i.webkitRequestFullscreen) { //Chrome/Safari
+            i.webkitRequestFullscreen();
+        } else if (i.mozRequestFullScreen) {    //Mozilla Firefox
+            i.mozRequestFullScreen();
+        } else if (i.msRequestFullscreen) {     //Internet Explorer
+            i.msRequestFullscreen();
+        }
+    }
+};
+
 //Prevent the browser from handling keydown events.
 window.addEventListener("keydown", function (e) {
     switch (e.keyCode) {
@@ -106,6 +128,9 @@ GameEngine.prototype.startInput = function () {
         if (!that.keyboardState[e.keyCode]) {
             console.log("key down event: " + e.keyCode);
         }
+        if (e.keyCode === 70) {
+            requestFullScreen();
+        }
         that.keyboardState[e.keyCode] = true;
     }, false);
     //https://developer.mozilla.org/en-US/docs/Web/Reference/Events/keyup
@@ -114,6 +139,58 @@ GameEngine.prototype.startInput = function () {
         that.keyboardState[e.keyCode] = false;
         that.keyboardUp = e;
     }, false);
+    
+    var thatCanvas = this.ctx.canvas;
+    var fsEvent = function (e) {
+        console.log("fullscreen event fired!");
+
+        var width;
+        var height;
+
+        if (document.fullscreenElement ||
+            document.webkitFullscreenElement ||
+            document.mozFullScreenElement ||
+            document.msFullscreenElement) {
+            //var rect = document.getElementById("canvasWrapper").getBoundingClientRect();
+            //width = rect.width;
+            //height = rect.height;
+
+            // the more standards compliant browsers (mozilla/netscape/opera/IE7) use window.innerWidth and window.innerHeight
+            if (typeof window.innerWidth != 'undefined') {
+                width = window.innerWidth,
+                height = window.innerHeight
+            }
+
+                // IE6 in standards compliant mode (i.e. with a valid doctype as the first line in the document)
+            else if (typeof document.documentElement != 'undefined'
+                && typeof document.documentElement.clientWidth !=
+                'undefined' && document.documentElement.clientWidth != 0) {
+                width = document.documentElement.clientWidth,
+                height = document.documentElement.clientHeight
+            }
+
+                // older versions of IE
+            else {
+                width = document.getElementsByTagName('body')[0].clientWidth,
+                height = document.getElementsByTagName('body')[0].clientHeight
+            }
+        } else {
+            width = 1000;
+            height = 600;
+        }
+
+        console.log("new window dimensions: (" + width + "," + height + ")");
+
+        thatCanvas.width = width;
+        thatCanvas.height = height;
+        offCanvas.width = width;
+        offCanvas.height = height;
+    }
+
+    this.ctx.canvas.parentNode.addEventListener("fullscreenchange", fsEvent, false);       //W3 standard
+    this.ctx.canvas.parentNode.addEventListener("webkitfullscreenchange", fsEvent, false); //Chrome
+    this.ctx.canvas.parentNode.addEventListener("mozfullscreenchange", fsEvent, false);    //Mozilla Firefox
+    this.ctx.canvas.parentNode.addEventListener("MSFullscreenChange", fsEvent, false);     //Internet Explorer
 
     console.log("input events set up");
 }
@@ -451,41 +528,74 @@ TileMap.prototype.drawInit = function (ctx) {
     this.imgCache = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
 }
 
+var barfoo = true;
+var fobaro = true;
+var foobar = true;
+var offCanvas = null;
 TileMap.prototype.drawMap = function (ctx) {
+    var offCtx = null;
+    if (!offCanvas) {
+        offCanvas = document.createElement('Canvas');
+        offCanvas.width = ctx.canvas.width;
+        offCanvas.height = ctx.canvas.height;
+    }
+    offCtx = offCanvas.getContext('2d');
+    offCtx.clearRect(0, 0, offCtx.canvas.width, offCtx.canvas.height);
+    var count = 0;
     //x, y for canvas coordinates
     //i, j for tile coordinates
     var j = this.y;
     if (j < 0) {
         var temp = this.tileMapHeight * gameMap.length;
-        //j = Math.floor(Math.abs(temp + this.y % temp) / this.tileMapHeight);
         j = gameMap.length + Math.ceil(this.y / this.tileMapHeight) % gameMap.length;
     } else {
         j = Math.floor(this.y / this.tileMapHeight);
     }
-    for (y = -this.y % this.tileMapHeight / this.tileMapHeight - this.tileMapHeight;
+
+    for (var y = -this.y % this.tileMapHeight / this.tileMapHeight - 1;
         (y - 2) * this.tileMapHeight / 2 < this.game.ctx.canvas.height;
         y++, j++) {
+        if (barfoo) {
+            console.log("Starting y: " + y);
+            console.log("Starting lower bound: " + (y - 2) * this.tileMapHeight / 2);
+            console.log("Min tiles to cover canvas height: " + this.game.ctx.canvas.height / (this.tileMapHeight / 2));
+            barfoo = false;
+        }
         var skew = Math.floor(j % 2) !== 0;
         var i = this.x;
         if (i < 0) {
             var temp = this.tileMapWidth * gameMap[j % gameMap.length].length;
-            //i = Math.floor(Math.abs(temp + this.x % temp) / this.tileMapWidth);
             i = gameMap[j % gameMap.length].length + Math.ceil(this.x / this.tileMapWidth) % gameMap[j % gameMap.length].length;
         } else {
             i = Math.floor(this.x / this.tileMapWidth);
         }
-        for (x = -this.x % this.tileMapWidth / this.tileMapWidth - this.tileMapWidth;
+
+        var bar = true;
+        for (var x = -this.x % this.tileMapWidth / this.tileMapWidth - 1;
             (x - 1) * this.tileMapWidth < this.game.ctx.canvas.width;
             x++, i++) {
+            if (fobaro) {
+                console.log("Starting x: " + x);
+                console.log("Starting lower bound: " + (x - 1) * this.tileMapWidth);
+                console.log("Min tiles to cover canvas width: " + this.game.ctx.canvas.width / this.tileMapWidth);
+                fobaro = false;
+            }
+
+            count++;
             var tileID = gameMap[j % gameMap.length][i % gameMap[j % gameMap.length].length];
-            ctx.drawImage(this.img,
-                          tileID * this.tilePixelWidth, 0,
+            offCtx.drawImage(this.img,
+                          (tileID) * this.tilePixelWidth, 0,
                           this.tilePixelWidth, this.tilePixelHeight,
                           this.tileMapWidth * (skew / 2 + x - 1), (y - 1) * this.tileMapHeight / 2,
                           this.tilePixelWidth, this.tilePixelHeight);
         }
         skew = !skew;
     }
+    if (foobar) {
+        console.log("Tiles drawn: " + count);
+        foobar = false;
+    }
+    ctx.drawImage(offCanvas, 0, 0);
 }
 
 TileMap.prototype.draw = function (ctx) {
@@ -521,11 +631,13 @@ ASSET_MANAGER.queueDownload("images/test.png");
 ASSET_MANAGER.queueDownload("images/test_shadow.png");
 ASSET_MANAGER.queueDownload("images/map.gif");
 ASSET_MANAGER.queueDownload("images/map_tiles.png");
+ASSET_MANAGER.queueDownload("images/sky_bg.png");
 ASSET_MANAGER.downloadAll(function () {
     //console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
-    var player = new Player(engine, 50, 50)
+    var player = new Player(engine, 50, 50);
+    engine.addEntity(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 0, 0));
     engine.addEntity(new TileMap(engine, player));
     engine.addEntity(player);
     engine.addEntity(player.shadow);
