@@ -9,6 +9,30 @@
             });
 })();
 
+window.requestFullScreen = function () {
+    //check to see if fullscreen is enabled.
+    if (document.fullscreenEnabled ||
+        document.webkitFullscreenEnabled ||
+        document.mozFullScreenEnabled ||
+        document.msFullscreenEnabled) {
+
+        var i = document.getElementById("canvasWrapper");
+
+        // go full-screen
+        if (i.requestFullscreen) {              //W3 standard
+            i.requestFullscreen();
+        } else if (i.webkitRequestFullscreen) { //Chrome/Safari
+            i.webkitRequestFullscreen();
+        } else if (i.mozRequestFullScreen) {    //Mozilla Firefox
+            i.mozRequestFullScreen();
+        } else if (i.msRequestFullscreen) {     //Internet Explorer
+            i.msRequestFullscreen();
+        }
+    } else {
+        console.log("Full screen is disabled.");
+    }
+};
+
 //Prevent the browser from handling keydown events.
 window.addEventListener("keydown", function (e) {
     switch (e.keyCode) {
@@ -72,6 +96,7 @@ function GameEngine() {
     this.timer = new Timer();
     this.entities = [];
     this.ctx = null;
+    this.camera = null;
     this.clockTick = null;
 
     this.mouseClick = null;
@@ -106,6 +131,9 @@ GameEngine.prototype.startInput = function () {
         if (!that.keyboardState[e.keyCode]) {
             console.log("key down event: " + e.keyCode);
         }
+        if (e.keyCode === 70) {
+            requestFullScreen();
+        }
         that.keyboardState[e.keyCode] = true;
     }, false);
     //https://developer.mozilla.org/en-US/docs/Web/Reference/Events/keyup
@@ -114,6 +142,56 @@ GameEngine.prototype.startInput = function () {
         that.keyboardState[e.keyCode] = false;
         that.keyboardUp = e;
     }, false);
+    
+    var thatCanvas = this.ctx.canvas;
+    var fsEvent = function (e) {
+        console.log("fullscreen event fired!");
+
+        var width;
+        var height;
+
+        if (document.fullscreenElement ||
+            document.webkitFullscreenElement ||
+            document.mozFullScreenElement ||
+            document.msFullscreenElement) {
+            //var rect = document.getElementById("canvasWrapper").getBoundingClientRect();
+            //width = rect.width;
+            //height = rect.height;
+
+            // the more standards compliant browsers (mozilla/netscape/opera/IE7) use window.innerWidth and window.innerHeight
+            if (typeof window.innerWidth != 'undefined') {
+                width = window.innerWidth,
+                height = window.innerHeight
+            }
+
+                // IE6 in standards compliant mode (i.e. with a valid doctype as the first line in the document)
+            else if (typeof document.documentElement != 'undefined'
+                && typeof document.documentElement.clientWidth !=
+                'undefined' && document.documentElement.clientWidth != 0) {
+                width = document.documentElement.clientWidth,
+                height = document.documentElement.clientHeight
+            }
+
+                // older versions of IE
+            else {
+                width = document.getElementsByTagName('body')[0].clientWidth,
+                height = document.getElementsByTagName('body')[0].clientHeight
+            }
+        } else {
+            width = 1000;
+            height = 600;
+        }
+
+        console.log("new window dimensions: (" + width + "," + height + ")");
+
+        thatCanvas.width = width;
+        thatCanvas.height = height;
+    }
+
+    this.ctx.canvas.parentNode.addEventListener("fullscreenchange", fsEvent, false);       //W3 standard
+    this.ctx.canvas.parentNode.addEventListener("webkitfullscreenchange", fsEvent, false); //Chrome
+    this.ctx.canvas.parentNode.addEventListener("mozfullscreenchange", fsEvent, false);    //Mozilla Firefox
+    this.ctx.canvas.parentNode.addEventListener("MSFullscreenChange", fsEvent, false);     //Internet Explorer
 
     console.log("input events set up");
 }
@@ -195,7 +273,7 @@ function Entity(game, image, x, y, a) {
     this.img = image;
     this.x = x;
     this.y = y;
-    this.a = a;
+    this.a = a; //radians
     this.dispose = false; //set this to true to remove the entity from the game.
 }
 
@@ -216,7 +294,7 @@ Entity.prototype.rotateAndCache = function (image) {
 }
 
 Entity.prototype.draw = function (ctx) {
-    this.game.ctx.drawImage(this.img, this.x, this.y);
+    this.game.ctx.drawImage(this.img, this.x - this.game.camera.x - this.img.width / 2, (this.y - this.game.camera.y - this.img.height / 2) * tileMapHeight / tileMapWidth);
 }
 
 Entity.prototype.update = function () {
@@ -241,49 +319,113 @@ Entity.prototype.removeFromGame = function() {
 
 
 
-function Player(game, x, y) {
-    Entity.call(this, game, null, x, y, 0);
+function Camera(game, player) {
+    Entity.call(this, game, null);
+    this.player = player;
+    //the top left corner of the screen
+    this.x = player.x - game.ctx.canvas.width / 2;
+    this.y = player.y - game.ctx.canvas.height / 2;
+    //the point at which the camera's center attempts to follow, relative to the player
+    var distance = Math.max(player.speed * 0.25 - 100, 0);
+    this.centerX = this.game.ctx.canvas.width / 2 + distance * Math.cos(this.player.a);
+    this.centerY = this.game.ctx.canvas.height / 2 + distance * Math.sin(this.player.a);
+    //the point at which the camera's center is at, relative to the player
+    this.actualX = this.centerX; 
+    this.actualY = this.centerY;
+
+    this.speed = 0;
+    this.maxSpeed = 10;
+    this.acceleration = 0.875;
+}
+Camera.prototype = new Entity();
+Camera.prototype.constructor = Camera;
+
+Camera.prototype.draw = function (ctx) {
+    if (!debugMode) {
+        return;
+    }
+    ctx.beginPath();
+    ctx.strokeStyle = "blue";
+    ctx.arc(this.centerX - this.x, this.centerY - this.y, 50, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.strokeStyle = "aqua";
+    ctx.arc(this.actualX - this.x, this.actualY - this.y, 45, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+Camera.prototype.update = function () {
+    var distance = Math.max(this.player.speed * 0.25, this.player.groundSpeed * 0.125);
+    this.centerX = this.player.x + distance * Math.cos(this.player.a);
+    this.centerY = this.player.y + distance * Math.sin(this.player.a);
+    var dx = this.centerX - this.actualX;
+    var dy = this.centerY - this.actualY;
+    this.a = Math.atan2(dy, dx);
+    this.speed = Math.min(this.speed + this.acceleration, (dx * dx + dy * dy) / 169 + 0.25); //Math.min(speed + acc, center delta / 13 + 0.25);
+    if (this.speed > this.maxSpeed) {
+        this.speed = this.maxSpeed;
+    }
+    if (dx >= 0) {
+        this.actualX += Math.min(this.speed * Math.cos(this.a), dx);
+    } else {
+        this.actualX += Math.max(this.speed * Math.cos(this.a), dx);
+    }
+    if (dy >= 0) {
+        this.actualY += Math.min(this.speed * Math.sin(this.a), dy);
+    } else {
+        this.actualY += Math.max(this.speed * Math.sin(this.a), dy);
+    }
+    this.x = this.actualX - this.game.ctx.canvas.width / 2;
+    this.y = this.actualY - this.game.ctx.canvas.height / 2;
+}
+
+
+
+function Player(game, sprite, shadowSprite, x, y) {
+    Entity.call(this, game, sprite, x, y, 0);
+    this.shadowImg = shadowSprite;
     this.groundHeightOffset = 10;
     this.h = this.groundHeightOffset;
     this.speed = 200;
+    this.groundSpeed = 200;
     this.flySpeed = 500;
-    this.flySpeedMin = this.speed / 2;
+    this.flySpeedMin = this.groundSpeed / 2;
     this.flySpeedHeight = 120;
-    this.flySpeedActual = this.speed;
     this.flyAcceleration = 5;
     this.angleSpeed = 3 * Math.PI / 180;
     this.isFlying = false;
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
     this.shadowOffsetY = 0.25;  //pixels per height
-    this.map = new Map(game, this);
-    this.game.addEntity(this.map);
-    this.shadow = new PlayerShadow(game, this);
-    this.game.addEntity(this.shadow);
-    this.playerSprite = new PlayerSprite(game, this);
-    this.game.addEntity(this.playerSprite);
 }
 Player.prototype = new Entity();
 Player.prototype.constructor = Player;
 
 Player.prototype.draw = function (ctx) {
-    var ctx = this.game.ctx;
-    // var gradient = ctx.createLinearGradient(this.x, this.y, this.x, this.playerSprite.y);
-    // gradient.addColorStop(0, "orange");
-    // gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
-    // ctx.strokeStyle = gradient;
-    // ctx.moveTo(this.x, this.y);
-    // ctx.lineTo(this.playerSprite.x, this.playerSprite.y);
-    // ctx.stroke();
+    var groundX = this.x - this.game.camera.x;
+    var groundY = this.y - this.game.camera.y;
+    var spriteX = this.x - this.game.camera.x;
+    var spriteY = this.y - this.game.camera.y + this.h * this.heightOffset;
+    var shadowX = this.x - this.game.camera.x + this.h * this.shadowOffsetX;
+    var shadowY = this.y - this.game.camera.y + this.h * this.shadowOffsetY;
 
-    // ctx.beginPath();
-    // gradient = ctx.createLinearGradient(this.x, this.y, this.shadow.x, this.shadow.y);
-    // gradient.addColorStop(0, "blue");
-    // gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
-    // ctx.strokeStyle = gradient;
-    // ctx.moveTo(this.x, this.y);
-    // ctx.lineTo(this.shadow.x, this.shadow.y);
-    // ctx.stroke();
+    //Draw the ground indicator
+    var gradient = ctx.createLinearGradient(this.x, this.y, spriteX, spriteY);
+    gradient.addColorStop(0, "orange");
+    gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
+    ctx.strokeStyle = gradient;
+    ctx.moveTo(groundX, groundY);
+    ctx.lineTo(spriteX, spriteY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    gradient = ctx.createLinearGradient(this.x, this.y, shadowX, shadowY);
+    gradient.addColorStop(0, "blue");
+    gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
+    ctx.strokeStyle = gradient;
+    ctx.moveTo(groundX, groundY);
+    ctx.lineTo(shadowX, shadowY);
+    ctx.stroke();
 
     var r = 10;
     ctx.beginPath();
@@ -292,13 +434,33 @@ Player.prototype.draw = function (ctx) {
     } else {
         ctx.strokeStyle = "rgba(255,0,0,0.5)";
     }
-    ctx.arc(this.playerSprite.x, this.playerSprite.y, r, 0, Math.PI * 2);
-    ctx.moveTo(this.playerSprite.x, this.playerSprite.y);
-    ctx.lineTo(this.playerSprite.x + r * Math.cos(this.a), this.playerSprite.y + r * Math.sin(this.a));
+    ctx.arc(spriteX, spriteY, r, 0, Math.PI * 2);
+    ctx.moveTo(spriteX, spriteY);
+    ctx.lineTo(spriteX + r * Math.cos(this.a), spriteY + r * Math.sin(this.a));
     ctx.stroke();
 
-    ctx.fillText("X: " + this.x, this.playerSprite.x, this.playerSprite.y - 30);
-    ctx.fillText("Y: " + this.y, this.playerSprite.x, this.playerSprite.y - 15);
+    //Draw the player shadow
+    ctx.drawImage(this.shadowImg,
+                  0, 0,
+                  this.shadowImg.width, this.shadowImg.height,
+                  shadowX, shadowY,
+                  this.shadowImg.width, this.shadowImg.height);
+
+    //Draw the player sprite
+    ctx.drawImage(this.img,
+                  0, 0,
+                  this.img.width, this.img.height,
+                  spriteX, spriteY,
+                  this.img.width, this.img.height);
+
+    if (debugMode) {
+        ctx.fillText("X: " + this.x.toFixed(2), 10, 15);
+        ctx.fillText("Y: " + this.y.toFixed(2), 10, 30);
+        ctx.fillText("H: " + this.h.toFixed(2), 10, 45);
+        ctx.fillText("A: " + (this.a * 180 / Math.PI).toFixed(2) + "\u00B0", 10, 60);
+        ctx.fillText("S: " + this.speed.toFixed(2), 10, 75);
+        ctx.fillText("Misc: " + this.x.toFixed(2) + " " + this.game.camera.actualX.toFixed(2) + " " + this.game.camera.x.toFixed(2), 10, 90);
+    }
 }
 
 Player.prototype.update = function () {
@@ -315,27 +477,24 @@ Player.prototype.update = function () {
         if (this.game.keyboardState[83]) {//s
             dh = -Math.min(this.flySpeedHeight * this.game.clockTick * 2, this.h - this.groundHeightOffset);
             if (dh === 0) {
-                this.flySpeedActual -= Math.min(this.flyAcceleration, this.flySpeedActual - this.flySpeedMin);
-                if (this.flySpeedActual <= this.speed) {
+                this.speed -= Math.min(this.flyAcceleration, this.speed - this.flySpeedMin);
+                if (this.speed <= this.groundSpeed) {
                     this.isFlying = false;
                 }
             } else {
-                this.flySpeedActual += Math.min(this.flyAcceleration, this.flySpeed - this.flySpeedActual);
+                this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
             }
         } else {
-            this.flySpeedActual += Math.min(this.flyAcceleration, this.flySpeed - this.flySpeedActual);
+            this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
         }
         //Ascend
         if (this.game.keyboardState[87]) {//w
             dh = this.flySpeedHeight * this.game.clockTick;
         }
         this.h += dh;
-        this.playerSprite.y += dh * this.heightOffset;
-        this.shadow.x += dh * this.shadowOffsetX;
-        this.shadow.y += dh * this.shadowOffsetY;
 
         //Calculate direction, velocity, and location
-        var dist = this.flySpeedActual * this.game.clockTick;
+        var dist = this.speed * this.game.clockTick;
         var angle = 0;
         if (dx !== 0 || dy !== 0) {
             angle = Math.atan2(dy, dx);
@@ -363,7 +522,7 @@ Player.prototype.update = function () {
 
         //Take off
         if (this.game.keyboardState[87]) { //w
-            this.flySpeedActual = this.speed * 0.5;
+            this.speed = this.groundSpeed * 0.5;
             this.isFlying = true;
         }
     }
@@ -380,40 +539,6 @@ Player.prototype.move = function (dx, dy) {
 }
 
 
-function PlayerSprite(game, player) {
-    Entity.call(this, game, ASSET_MANAGER.getAsset("images/test.png"),
-        player.x, player.y + player.h * player.heightOffset);
-    this.player = player;
-}
-PlayerSprite.prototype = new Entity();
-PlayerSprite.prototype.constructor = PlayerSprite;
-
-PlayerSprite.prototype.update = function () {
-    // if (this.isOutsideScreen()) {
-    //     this.wrapAroundScreen();
-    // }
-    this.x = this.game.ctx.canvas.width / 2;
-    this.y = this.game.ctx.canvas.height / 2 + this.player.h * this.player.heightOffset;
-}
-
-
-function PlayerShadow(game, player) {
-    Entity.call(this, game, ASSET_MANAGER.getAsset("images/test_shadow.png"),
-        player.x + player.h * player.shadowOffsetX, player.y + player.h * player.shadowOffsetY);
-    this.player = player;
-}
-PlayerShadow.prototype = new Entity();
-PlayerShadow.prototype.constructor = PlayerShadow;
-
-PlayerShadow.prototype.update = function () {
-    // if (this.isOutsideScreen()) {
-    //     this.wrapAroundScreen();
-    // }
-    this.x = this.game.ctx.canvas.width / 2 + this.player.h * this.player.shadowOffsetX;
-    this.y = this.game.ctx.canvas.height / 2 + this.player.h * this.player.shadowOffsetY;
-
-}
-
 function Map(game, player) {
     this.player = player;
     this.offsetX = -3600;
@@ -429,16 +554,197 @@ Map.prototype.update = function () {
     this.y = this.offsetY - this.player.y;
 }
 
+function TileMap(game, player, x, y) {
+    Entity.call(this, game, ASSET_MANAGER.getAsset("images/map_tiles.png"), x, y);
+    this.player = player;
+    this.imgCache = null;
+    this.tilePixelWidth = 38;  //How wide an individual tile is on the sprite sheet
+    this.tilePixelHeight = 27; //How high an individual tile is on the sprite sheet
+    this.tileMapWidth = 38;    //How wide an individual tile is on the game canvas
+    this.tileMapHeight = 20;   //How high an individual tile is on the game canvas
+    this.tileMapDepth = 7;     //How deep an individual tile is on the game canvas
+    this.drawInit(this.game.ctx);
+}
+TileMap.prototype = new Entity();
+TileMap.prototype.constructor = TileMap;
+
+//TileMap.prototype.update = function () {
+//    var max = Math.max(this.tileMapWidth, this.tileMapHeight);
+//    this.x = -this.player.x * this.tileMapWidth / max;
+//    this.y = -this.player.y * this.tileMapHeight / max;
+//}
+
+TileMap.prototype.drawInit = function (ctx) {
+    this.drawMap(ctx);
+}
+
+//var barfoo = true;
+//var fobaro = true;
+//var foobar = true;
+//var offCanvas = null;
+//TileMap.prototype.drawMap = function (ctx) {
+//    var offCtx = null;
+//    if (!offCanvas) {
+//        offCanvas = document.createElement('Canvas');
+//        offCanvas.width = ctx.canvas.width;
+//        offCanvas.height = ctx.canvas.height;
+//    }
+//    offCtx = offCanvas.getContext('2d');
+//    offCtx.clearRect(0, 0, offCtx.canvas.width, offCtx.canvas.height);
+//    var count = 0;
+//    //x, y for canvas coordinates
+//    //i, j for tile coordinates
+//    var j = this.y;
+//    if (j < 0) {
+//        var temp = this.tileMapHeight * gameMap.length;
+//        j = gameMap.length + Math.ceil(this.y / this.tileMapHeight) % gameMap.length;
+//    } else {
+//        j = Math.floor(this.y / this.tileMapHeight);
+//    }
+
+//    for (var y = -this.y % this.tileMapHeight / this.tileMapHeight - 1;
+//        (y - 2) * this.tileMapHeight / 2 < this.game.ctx.canvas.height;
+//        y++, j++) {
+//        if (barfoo) {
+//            console.log("Starting y: " + y);
+//            console.log("Starting lower bound: " + (y - 2) * this.tileMapHeight / 2);
+//            console.log("Min tiles to cover canvas height: " + this.game.ctx.canvas.height / (this.tileMapHeight / 2));
+//            barfoo = false;
+//        }
+//        var skew = Math.floor(j % 2) !== 0;
+//        var i = this.x;
+//        if (i < 0) {
+//            var temp = this.tileMapWidth * gameMap[j % gameMap.length].length;
+//            i = gameMap[j % gameMap.length].length + Math.ceil(this.x / this.tileMapWidth) % gameMap[j % gameMap.length].length;
+//        } else {
+//            i = Math.floor(this.x / this.tileMapWidth);
+//        }
+
+//        var bar = true;
+//        for (var x = -this.x % this.tileMapWidth / this.tileMapWidth - 1;
+//            (x - 1) * this.tileMapWidth < this.game.ctx.canvas.width;
+//            x++, i++) {
+//            if (fobaro) {
+//                console.log("Starting x: " + x);
+//                console.log("Starting lower bound: " + (x - 1) * this.tileMapWidth);
+//                console.log("Min tiles to cover canvas width: " + this.game.ctx.canvas.width / this.tileMapWidth);
+//                fobaro = false;
+//            }
+
+//            count++;
+//            var tileID = gameMap[j % gameMap.length][i % gameMap[j % gameMap.length].length];
+//            offCtx.drawImage(this.img,
+//                          (tileID) * this.tilePixelWidth, 0,
+//                          this.tilePixelWidth, this.tilePixelHeight,
+//                          this.tileMapWidth * (skew / 2 + x - 1), (y - 1) * this.tileMapHeight / 2,
+//                          this.tilePixelWidth, this.tilePixelHeight);
+//        }
+//        skew = !skew;
+//    }
+//    if (foobar) {
+//        console.log("Tiles drawn: " + count);
+//        foobar = false;
+//    }
+//    ctx.drawImage(offCanvas, 0, 0);
+//}
+
+TileMap.prototype.drawMap = function (ctx) {
+    var offCtx = null;
+    if (!this.imgCache) {
+        this.imgCache = document.createElement('Canvas');
+        this.imgCache.width = (gameMap[0].length + gameMap.length) * this.tileMapWidth / 2;
+        this.imgCache.height = (gameMap.length + gameMap[0].length) * this.tileMapHeight / 2 + this.tileMapDepth;
+    }
+    offCtx = this.imgCache.getContext('2d');
+    offCtx.clearRect(0, 0, offCtx.width, offCtx.height);
+
+    for (var j = 0; j < gameMap.length; j++) {
+        for (var i = gameMap[j].length - 1; i >= 0; i--) {
+            var tileID = (gameMap[j][i] & 0xFF0000) >> 16;
+            var low = gameMap[j][i] & 0xFF;
+            var high = (gameMap[j][i] & 0xFF00) >> 8;
+            for (var k = low; k <= high; k++) {
+                offCtx.drawImage(this.img,
+                              tileID * this.tilePixelWidth, 0,
+                              this.tilePixelWidth, this.tilePixelHeight,
+                              this.tileMapWidth / 2 * (i + j), this.tileMapHeight / 2 * (j + gameMap[j].length - i - 1) - this.tileMapDepth * k,
+                              this.tilePixelWidth, this.tilePixelHeight);
+            }
+        }
+    }
+}
+
+TileMap.prototype.draw = function (ctx) {
+    ctx.drawImage(this.imgCache, this.x - this.game.camera.x, (this.y - this.game.camera.y) * tileMapHeight / tileMapWidth);
+}
+
+var gameMap = [
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
+    [0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x20400, 0x20200, 0x20200, 0x20400, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20200, 0x20100, 0x20100, 0x20200, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20000, 0x20100, 0x20300, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x20000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
+    [0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20600, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x20400, 0x20200, 0x20200, 0x20400, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20200, 0x20100, 0x20100, 0x20200, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20000, 0x20100, 0x20300, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x20000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
+    [0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20600, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x20400, 0x20200, 0x20200, 0x20400, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20200, 0x20100, 0x20100, 0x20200, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20000, 0x20100, 0x20300, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x20000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
+    [0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20600, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x20400, 0x20200, 0x20200, 0x20400, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20200, 0x20100, 0x20100, 0x20200, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20000, 0x20100, 0x20300, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x20000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
+    [0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20600, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x20400, 0x20200, 0x20200, 0x20400, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20200, 0x20100, 0x20100, 0x20200, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20000, 0x20100, 0x20300, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x20000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
+    [0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20600, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x20400, 0x20200, 0x20200, 0x20400, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20200, 0x20100, 0x20100, 0x20200, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20200, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x20000, 0x20100, 0x20300, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20300, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20100, 0x10000, 0x10000, 0x10000, 0x10000, 0x20000, 0x20000, 0x10000, 0x10000, 0x10000, 0x20000, 0x10000, 0x10000, 0x10000, 0x10000, 0x20400, 0x10000, 0x10000, 0x10000, 0x10000, 0x20500, 0x10000],
+    [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000]
+];
+
+
+
 var ASSET_MANAGER = new AssetManager();
+var debugMode = true;
+var tileMapWidth = 38;
+var tileMapHeight = 20;
+var tileMapDepth = 7;
 
 ASSET_MANAGER.queueDownload("images/test.png");
 ASSET_MANAGER.queueDownload("images/test_shadow.png");
 ASSET_MANAGER.queueDownload("images/map.gif");
+ASSET_MANAGER.queueDownload("images/map_tiles.png");
+ASSET_MANAGER.queueDownload("images/sky_bg.png");
 ASSET_MANAGER.downloadAll(function () {
-    console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
-
+    //console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
-    engine.addEntity(new Player(engine, 100, 200));
+    var player = new Player(engine, ASSET_MANAGER.getAsset("images/test.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50, 50);
+    engine.addEntity(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
+    engine.addEntity(new TileMap(engine, player, 0, 0));
+    engine.addEntity(player);
+    engine.camera = new Camera(engine, player);
+    engine.addEntity(engine.camera);
     engine.start();
 });
