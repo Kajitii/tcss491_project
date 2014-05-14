@@ -294,7 +294,7 @@ Entity.prototype.rotateAndCache = function (image) {
 }
 
 Entity.prototype.draw = function (ctx) {
-    this.game.ctx.drawImage(this.img, this.x - this.game.camera.x - this.img.width / 2, (this.y - this.game.camera.y - this.img.height / 2) * tileMapHeight / tileMapWidth);
+    this.game.ctx.drawImage(this.img, this.x - this.game.camera.x - this.img.width / 2, (this.y - this.game.camera.y - this.img.height / 2) * tileYRatio);
 }
 
 Entity.prototype.update = function () {
@@ -325,6 +325,9 @@ function Camera(game, player) {
     //the top left corner of the screen
     this.x = player.x - game.ctx.canvas.width / 2;
     this.y = player.y - game.ctx.canvas.height / 2;
+    //
+    this.prevPlayerX = player.x;
+    this.prevPlayerY = player.y;
     //the point at which the camera's center attempts to follow, relative to the player
     var distance = Math.max(player.speed * 0.25 - 100, 0);
     this.centerX = this.game.ctx.canvas.width / 2 + distance * Math.cos(this.player.a);
@@ -344,6 +347,8 @@ Camera.prototype.draw = function (ctx) {
     if (!debugMode) {
         return;
     }
+    ctx.save();
+    ctx.scale(1, tileYRatio);
     ctx.beginPath();
     ctx.strokeStyle = "blue";
     ctx.arc(this.centerX - this.x, this.centerY - this.y, 50, 0, Math.PI * 2);
@@ -352,12 +357,19 @@ Camera.prototype.draw = function (ctx) {
     ctx.strokeStyle = "aqua";
     ctx.arc(this.actualX - this.x, this.actualY - this.y, 45, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
 }
 
 Camera.prototype.update = function () {
     var distance = Math.max(this.player.speed * 0.25, this.player.groundSpeed * 0.125);
+    var centerDX = this.player.x - this.prevPlayerX;
+    var centerDY = this.player.y - this.prevPlayerY;
+    this.prevPlayerX = this.player.x;
+    this.prevPlayerY = this.player.y;
     this.centerX = this.player.x + distance * Math.cos(this.player.a);
-    this.centerY = this.player.y + distance * Math.sin(this.player.a);
+    this.centerY = this.player.y + distance * Math.sin(this.player.a) * tileYRatio;
+    this.actualX += centerDX;
+    this.actualY += centerDY;
     var dx = this.centerX - this.actualX;
     var dy = this.centerY - this.actualY;
     this.a = Math.atan2(dy, dx);
@@ -376,7 +388,7 @@ Camera.prototype.update = function () {
         this.actualY += Math.max(this.speed * Math.sin(this.a), dy);
     }
     this.x = this.actualX - this.game.ctx.canvas.width / 2;
-    this.y = this.actualY - this.game.ctx.canvas.height / 2;
+    this.y = this.actualY - this.game.ctx.canvas.height / 2 / tileYRatio;
 }
 
 
@@ -402,6 +414,8 @@ Player.prototype = new Entity();
 Player.prototype.constructor = Player;
 
 Player.prototype.draw = function (ctx) {
+    var imgWidthOffset = this.img.width / 2; //TODO change this to fit the actual sprite when implemented.
+    var imgHeightOffset = this.img.height / 2; //TODO
     var groundX = this.x - this.game.camera.x;
     var groundY = this.y - this.game.camera.y;
     var spriteX = this.x - this.game.camera.x;
@@ -409,8 +423,32 @@ Player.prototype.draw = function (ctx) {
     var shadowX = this.x - this.game.camera.x + this.h * this.shadowOffsetX;
     var shadowY = this.y - this.game.camera.y + this.h * this.shadowOffsetY;
 
+    //Draw the player shadow
+    ctx.drawImage(this.shadowImg,
+                  0, 0,
+                  this.shadowImg.width, this.shadowImg.height,
+                  shadowX - this.shadowImg.width / 2, shadowY * tileYRatio - this.shadowImg.height / 2,
+                  this.shadowImg.width, this.shadowImg.height);
+
     //Draw the ground indicator
-    var gradient = ctx.createLinearGradient(this.x, this.y, spriteX, spriteY);
+    //Ground circle and direction
+    var r = 10;
+    ctx.save();
+
+    ctx.scale(1, tileYRatio);
+    ctx.beginPath();
+    if (this.isFlying) {
+        ctx.strokeStyle = "rgba(0,255,0,0.5)";
+    } else {
+        ctx.strokeStyle = "rgba(255,0,0,0.5)";
+    }
+    ctx.arc(groundX, groundY, r, 0, Math.PI * 2);
+    ctx.moveTo(groundX, groundY);
+    ctx.lineTo(groundX + r * Math.cos(this.a), groundY + r * Math.sin(this.a));
+    ctx.stroke();
+
+    //Ground to player sprite
+    var gradient = ctx.createLinearGradient(groundX, groundY, spriteX, spriteY);
     gradient.addColorStop(0, "orange");
     gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
     ctx.strokeStyle = gradient;
@@ -418,39 +456,23 @@ Player.prototype.draw = function (ctx) {
     ctx.lineTo(spriteX, spriteY);
     ctx.stroke();
 
+    //Ground to player shadow
     ctx.beginPath();
-    gradient = ctx.createLinearGradient(this.x, this.y, shadowX, shadowY);
+    gradient = ctx.createLinearGradient(groundX, groundY, shadowX, shadowY);
     gradient.addColorStop(0, "blue");
-    gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
+    gradient.addColorStop(1, "rgba(0, 0, 255, 0.10)");
     ctx.strokeStyle = gradient;
     ctx.moveTo(groundX, groundY);
     ctx.lineTo(shadowX, shadowY);
     ctx.stroke();
 
-    var r = 10;
-    ctx.beginPath();
-    if (this.isFlying) {
-        ctx.strokeStyle = "rgba(0,255,0,0.5)";
-    } else {
-        ctx.strokeStyle = "rgba(255,0,0,0.5)";
-    }
-    ctx.arc(spriteX, spriteY, r, 0, Math.PI * 2);
-    ctx.moveTo(spriteX, spriteY);
-    ctx.lineTo(spriteX + r * Math.cos(this.a), spriteY + r * Math.sin(this.a));
-    ctx.stroke();
-
-    //Draw the player shadow
-    ctx.drawImage(this.shadowImg,
-                  0, 0,
-                  this.shadowImg.width, this.shadowImg.height,
-                  shadowX, shadowY,
-                  this.shadowImg.width, this.shadowImg.height);
+    ctx.restore();
 
     //Draw the player sprite
     ctx.drawImage(this.img,
                   0, 0,
                   this.img.width, this.img.height,
-                  spriteX, spriteY,
+                  spriteX - imgWidthOffset, spriteY * tileYRatio - imgHeightOffset,
                   this.img.width, this.img.height);
 
     if (debugMode) {
@@ -459,7 +481,6 @@ Player.prototype.draw = function (ctx) {
         ctx.fillText("H: " + this.h.toFixed(2), 10, 45);
         ctx.fillText("A: " + (this.a * 180 / Math.PI).toFixed(2) + "\u00B0", 10, 60);
         ctx.fillText("S: " + this.speed.toFixed(2), 10, 75);
-        ctx.fillText("Misc: " + this.x.toFixed(2) + " " + this.game.camera.actualX.toFixed(2) + " " + this.game.camera.x.toFixed(2), 10, 90);
     }
 }
 
@@ -541,23 +562,29 @@ Player.prototype.move = function (dx, dy) {
 
 function Map(game, player) {
     this.player = player;
-    this.offsetX = -3600;
-    this.offsetY = -2600;
-    Entity.call(this, game, ASSET_MANAGER.getAsset("images/map.gif"),
-        player.x + this.offsetX, player.y + this.offsetY, 0);
+    this.quad = [];
 }
-
 Map.prototype = new Entity();
 Map.prototype.constructor = Map;
+
+Map.prototype.draw = function (ctx) {
+    //nothing
+}
+
 Map.prototype.update = function () {
     this.x = this.offsetX - this.player.x;
     this.y = this.offsetY - this.player.y;
+}
+
+Map.prototype.generateMap = function () {
+
 }
 
 function TileMap(game, player, x, y) {
     Entity.call(this, game, ASSET_MANAGER.getAsset("images/map_tiles.png"), x, y);
     this.player = player;
     this.imgCache = null;
+    this.detectionRadius = null;
     this.tilePixelWidth = 38;  //How wide an individual tile is on the sprite sheet
     this.tilePixelHeight = 27; //How high an individual tile is on the sprite sheet
     this.tileMapWidth = 38;    //How wide an individual tile is on the game canvas
@@ -672,10 +699,28 @@ TileMap.prototype.drawMap = function (ctx) {
             }
         }
     }
+
+    this.detectionRadius = Math.max(this.imgCache.width, this.imgCache.height) / 2;
 }
 
 TileMap.prototype.draw = function (ctx) {
-    ctx.drawImage(this.imgCache, this.x - this.game.camera.x, (this.y - this.game.camera.y) * tileMapHeight / tileMapWidth);
+    ctx.drawImage(this.imgCache, this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y - this.imgCache.height / 2) * tileYRatio);
+    if (debugMode) {
+        ctx.save();
+        ctx.scale(1, tileYRatio);
+        ctx.strokeStyle = "black";
+        for (var i = 10; i < this.detectionRadius; i *= Math.log(i * 7)) {
+            ctx.beginPath();
+            ctx.arc(this.x - this.game.camera.x, this.y - this.game.camera.y, i, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(this.x - this.game.camera.x, this.y - this.game.camera.y, this.detectionRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillText("(" + (this.x - this.game.camera.x).toFixed(2) + "," + (this.y - this.game.camera.y).toFixed(2) + ")", 10, 105);
+    }
 }
 
 var gameMap = [
@@ -725,11 +770,14 @@ var gameMap = [
 
 
 
+
+
 var ASSET_MANAGER = new AssetManager();
 var debugMode = true;
 var tileMapWidth = 38;
 var tileMapHeight = 20;
 var tileMapDepth = 7;
+var tileYRatio = tileMapHeight / tileMapWidth;
 
 ASSET_MANAGER.queueDownload("images/test.png");
 ASSET_MANAGER.queueDownload("images/test_shadow.png");
