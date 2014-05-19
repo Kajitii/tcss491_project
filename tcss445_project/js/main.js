@@ -94,7 +94,11 @@ requestAnimationFrame(callback, element) is used to only run the game if the tab
 
 function GameEngine() {
     this.timer = new Timer();
+
+    this.background = [];
     this.entities = [];
+    this.foreground = [];
+
     this.ctx = null;
     this.camera = null;
     this.clockTick = null;
@@ -186,6 +190,7 @@ GameEngine.prototype.startInput = function () {
 
         thatCanvas.width = width;
         thatCanvas.height = height;
+        thatCanvas.diagonal = Math.sqrt(Math.pow(width, 2) + Math.pow(height, 2));
     }
 
     this.ctx.canvas.parentNode.addEventListener("fullscreenchange", fsEvent, false);       //W3 standard
@@ -202,6 +207,7 @@ GameEngine.prototype.getXandY = function (e) {
 
 GameEngine.prototype.init = function (ctx) {
     this.ctx = ctx;
+    ctx.canvas.diagonal = Math.sqrt(Math.pow(ctx.canvas.width, 2) + Math.pow(ctx.canvas.height, 2));
     this.startInput();
 }
 
@@ -224,8 +230,14 @@ GameEngine.prototype.loop = function () {
 GameEngine.prototype.draw = function (callback) {
     this.ctx.beginPath();
     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+    for (var i = 0; i < this.background.length; i++) {
+        this.background[i].draw(this.ctx);
+    }
     for (var i = 0; i < this.entities.length; i++) {
         this.entities[i].draw(this.ctx);
+    }
+    for (var i = 0; i < this.foreground.length; i++) {
+        this.foreground[i].draw(this.ctx);
     }
 }
 
@@ -233,7 +245,17 @@ GameEngine.prototype.update = function () {
     for (var i = 0; i < this.entities.length; i++) {
         this.entities[i].update();
         if (this.entities[i].dispose) {
-            this.dispose(this.entities[i]);
+            this.entities.splice(i, 1);
+        }
+    }
+    for (var i = 0; i < this.background.length; i++) {
+        if (this.background[i].dispose) {
+            this.background.splice(i, 1);
+        }
+    }
+    for (var i = 0; i < this.foreground.length; i++) {
+        if (this.foreground[i].dispose) {
+            this.foreground.splice(i, 1);
         }
     }
 }
@@ -243,8 +265,16 @@ GameEngine.prototype.clearInputs = function () {
     this.mouseMove = null;
 }
 
+GameEngine.prototype.addBackground = function (entity) {
+    this.background.push(entity);
+}
+
 GameEngine.prototype.addEntity = function (entity) {
     this.entities.push(entity);
+}
+
+GameEngine.prototype.addForeground = function (entity) {
+    this.foreground.push(entity);
 }
 
 
@@ -418,10 +448,10 @@ Player.prototype.draw = function (ctx) {
     var imgHeightOffset = this.img.height / 2; //TODO
     var groundX = this.x - this.game.camera.x;
     var groundY = this.y - this.game.camera.y;
-    var spriteX = this.x - this.game.camera.x;
-    var spriteY = this.y - this.game.camera.y + this.h * this.heightOffset;
-    var shadowX = this.x - this.game.camera.x + this.h * this.shadowOffsetX;
-    var shadowY = this.y - this.game.camera.y + this.h * this.shadowOffsetY;
+    var spriteX = groundX;
+    var spriteY = groundY + this.h * this.heightOffset;
+    var shadowX = groundX + this.h * this.shadowOffsetX;
+    var shadowY = groundY + this.h * this.shadowOffsetY;
 
     //Draw the player shadow
     ctx.drawImage(this.shadowImg,
@@ -476,6 +506,7 @@ Player.prototype.draw = function (ctx) {
                   this.img.width, this.img.height);
 
     if (debugMode) {
+        ctx.fillStyle = "black";
         ctx.fillText("X: " + this.x.toFixed(2), 10, 15);
         ctx.fillText("Y: " + this.y.toFixed(2), 10, 30);
         ctx.fillText("H: " + this.h.toFixed(2), 10, 45);
@@ -561,28 +592,154 @@ Player.prototype.move = function (dx, dy) {
 
 
 function Map(game, player) {
+    this.game = game;
     this.player = player;
-    this.quad = [];
+    this.minimap = null;
+    this.scale = 100;            //real world pixels per minimap pixel
+    this.mapQuadrantWidth = 10;  //quadrants
+    this.mapQuadrantHeight = 10; //quadrants
+    this.quadrantWidth = 10000;  //pixels
+    this.quadrantHeight = 10000; //pixels
+    this.mapWidth = this.mapQuadrantWidth * this.quadrantWidth;
+    this.mapHeight = this.mapQuadrantHeight * this.quadrantHeight;
+    this.currentQuadrantX = 0;
+    this.currentQuadrantY = 0;
+    this.quadrants = [];
+    this.whatever = false;
 }
 Map.prototype = new Entity();
 Map.prototype.constructor = Map;
 
-Map.prototype.draw = function (ctx) {
-    //nothing
+Map.prototype.initMap = function () {
+    if (this.minimap) {
+        return;
+    }
+
+    console.log("creating the map");
+    this.minimap = document.createElement('Canvas');
+    this.minimap.width = this.mapWidth / this.scale;
+    this.minimap.height = this.mapHeight / this.scale;
+
+    for (var i = 0; i < this.mapQuadrantHeight; i++) {
+        var array = [];
+        for (var j = 0; j < this.mapQuadrantWidth; j++) {
+            var q = new Quadrant(j * this.quadrantWidth, i * this.quadrantHeight,
+                                 this.quadrantWidth, this.quadrantHeight,
+                                 10000000);
+            array.push(q);
+        }
+        this.quadrants.push(array);
+    }
 }
 
-Map.prototype.update = function () {
-    this.x = this.offsetX - this.player.x;
-    this.y = this.offsetY - this.player.y;
+Map.prototype.addIsland = function (island) {
+    this.quadrants[island.y][island.x].islands.push(island);
 }
 
 Map.prototype.generateMap = function () {
-
+    var ctx = this.minimap.getContext('2d');
+    ctx.fillStyle = "green";
+    for (var j = 0; j < this.mapQuadrantHeight; j++) {
+        for (var i = 0; i < this.mapQuadrantWidth; i++) {
+            var q = this.quadrants[j][i];
+            q.init(this.game);
+            for (var k = 0; k < q.islands.length; k++) {
+                var island = q.islands[k];
+                ctx.beginPath();
+                ctx.arc(island.x / this.scale, island.y / this.scale, island.detectionRadius / this.scale, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
 }
 
-function TileMap(game, player, x, y) {
-    Entity.call(this, game, ASSET_MANAGER.getAsset("images/map_tiles.png"), x, y);
-    this.player = player;
+Map.prototype.draw = function (ctx) {
+    ctx.drawImage(this.minimap, 0, 0);
+    ctx.beginPath();
+    ctx.fillStyle = "red";
+    ctx.arc(this.player.x / this.scale, this.player.y / this.scale, 1, 0, Math.PI * 2);
+    ctx.fill();
+    if (debugMode) {
+        var i = this.currentQuadrantX - 1;
+        if (i < 0) i += this.mapQuadrantWidth;
+        var j = this.currentQuadrantY - 1;
+        if (j < 0) j += this.mapQuadrantHeight;
+        ctx.filleStyle = "black";
+        ctx.fillText("(" + i + "," + j + ") " + this.whatever, 10, 120);
+        ctx.fillText("(" + (i + 2) + "," + (j + 2) + ")", 10, 135);
+    }
+}
+
+var barbar = true;
+Map.prototype.update = function () {
+    //if (this.player.x < 0) {
+    //    this.player.x += this.mapWidth;
+    //} else if (this.player.x >= this.mapWidth) {
+    //    this.player.x -= this.mapWidth;
+    //}
+    //if (this.player.y < 0) {
+    //    this.player.y += this.mapHeight;
+    //} else if (this.player.y >= this.mapHeight) {
+    //    this.player.y -= this.mapHeight;
+    //}
+    this.whatever = [1];
+    this.currentQuadrantX = Math.floor(this.player.x / this.quadrantWidth);
+    this.currentQuadrantY = Math.floor(this.player.y / this.quadrantHeight);
+    var i = this.currentQuadrantX - 1;
+    if (i < 0) i += this.mapQuadrantWidth;
+    var jStart = this.currentQuadrantY - 1;
+    if (jStart < 0) jStart += this.mapQuadrantHeight;
+    var iStop = i + 2;
+    var jStop = jStart + 2;
+    for (; i <= iStop; i++) {
+        for (j = jStart; j <= jStop; j++) {
+            var q = this.quadrants[j % this.mapQuadrantHeight][i % this.mapQuadrantWidth];
+            for (var k = 0; k < q.islands.length; k++) {
+                var island = q.islands[k];
+                if (island.isNearPlayer(this.player)) {
+                    this.whatever.push(island);
+                    if (island.dispose) {
+                        this.game.addBackground(island);
+                        island.dispose = false;
+                    }
+                } else {
+                    island.dispose = true;
+                }
+            }
+        }
+    }
+    barbar = false;
+}
+
+
+
+function Quadrant(x, y, w, h, d) {
+    this.x = x;
+    this.y = y;
+    this.width = w;
+    this.height = h;
+    this.density = d; //pixels in the quadrant per island
+    this.islands = [];
+}
+
+Quadrant.prototype.init = function (game) {
+    var attempts = Math.floor(this.width * this.height / this.density) - this.islands.length;
+    for (var i = 0; i < attempts; i++) {
+        var island = new TileMap(game, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
+        var x = this.x + Math.random() * (this.width - island.detectionRadius);
+        var y = this.y + Math.random() * (this.height - island.detectionRadius);
+        island.x = x;
+        island.y = y;
+        island.init();
+        this.islands.push(island);
+    }
+}
+
+
+
+function TileMap(game, asset, x, y) {
+    Entity.call(this, game, asset, x, y);
+    this.mapData = null;
     this.imgCache = null;
     this.detectionRadius = null;
     this.tilePixelWidth = 38;  //How wide an individual tile is on the sprite sheet
@@ -590,7 +747,7 @@ function TileMap(game, player, x, y) {
     this.tileMapWidth = 38;    //How wide an individual tile is on the game canvas
     this.tileMapHeight = 20;   //How high an individual tile is on the game canvas
     this.tileMapDepth = 7;     //How deep an individual tile is on the game canvas
-    this.drawInit(this.game.ctx);
+    this.dispose = true;
 }
 TileMap.prototype = new Entity();
 TileMap.prototype.constructor = TileMap;
@@ -601,127 +758,117 @@ TileMap.prototype.constructor = TileMap;
 //    this.y = -this.player.y * this.tileMapHeight / max;
 //}
 
-TileMap.prototype.drawInit = function (ctx) {
-    this.drawMap(ctx);
+TileMap.prototype.init = function () {
+    this.generateMap();
+    this.drawMap();
 }
 
-//var barfoo = true;
-//var fobaro = true;
-//var foobar = true;
-//var offCanvas = null;
-//TileMap.prototype.drawMap = function (ctx) {
-//    var offCtx = null;
-//    if (!offCanvas) {
-//        offCanvas = document.createElement('Canvas');
-//        offCanvas.width = ctx.canvas.width;
-//        offCanvas.height = ctx.canvas.height;
-//    }
-//    offCtx = offCanvas.getContext('2d');
-//    offCtx.clearRect(0, 0, offCtx.canvas.width, offCtx.canvas.height);
-//    var count = 0;
-//    //x, y for canvas coordinates
-//    //i, j for tile coordinates
-//    var j = this.y;
-//    if (j < 0) {
-//        var temp = this.tileMapHeight * gameMap.length;
-//        j = gameMap.length + Math.ceil(this.y / this.tileMapHeight) % gameMap.length;
-//    } else {
-//        j = Math.floor(this.y / this.tileMapHeight);
-//    }
+//Randomly generate a new map.
+TileMap.prototype.generateMap = function () {
+    this.mapData = [
+        [0x00000, 0x10000, 0x10000, 0x10000, 0x00000],
+        [0x10000, 0x10000, 0x20000, 0x10000, 0x10000],
+        [0x10000, 0x20000, 0x20000, 0x20000, 0x10000],
+        [0x10000, 0x10000, 0x20000, 0x10000, 0x10000],
+        [0x00000, 0x10000, 0x10000, 0x10000, 0x00000]
+    ];
+}
 
-//    for (var y = -this.y % this.tileMapHeight / this.tileMapHeight - 1;
-//        (y - 2) * this.tileMapHeight / 2 < this.game.ctx.canvas.height;
-//        y++, j++) {
-//        if (barfoo) {
-//            console.log("Starting y: " + y);
-//            console.log("Starting lower bound: " + (y - 2) * this.tileMapHeight / 2);
-//            console.log("Min tiles to cover canvas height: " + this.game.ctx.canvas.height / (this.tileMapHeight / 2));
-//            barfoo = false;
-//        }
-//        var skew = Math.floor(j % 2) !== 0;
-//        var i = this.x;
-//        if (i < 0) {
-//            var temp = this.tileMapWidth * gameMap[j % gameMap.length].length;
-//            i = gameMap[j % gameMap.length].length + Math.ceil(this.x / this.tileMapWidth) % gameMap[j % gameMap.length].length;
-//        } else {
-//            i = Math.floor(this.x / this.tileMapWidth);
-//        }
-
-//        var bar = true;
-//        for (var x = -this.x % this.tileMapWidth / this.tileMapWidth - 1;
-//            (x - 1) * this.tileMapWidth < this.game.ctx.canvas.width;
-//            x++, i++) {
-//            if (fobaro) {
-//                console.log("Starting x: " + x);
-//                console.log("Starting lower bound: " + (x - 1) * this.tileMapWidth);
-//                console.log("Min tiles to cover canvas width: " + this.game.ctx.canvas.width / this.tileMapWidth);
-//                fobaro = false;
-//            }
-
-//            count++;
-//            var tileID = gameMap[j % gameMap.length][i % gameMap[j % gameMap.length].length];
-//            offCtx.drawImage(this.img,
-//                          (tileID) * this.tilePixelWidth, 0,
-//                          this.tilePixelWidth, this.tilePixelHeight,
-//                          this.tileMapWidth * (skew / 2 + x - 1), (y - 1) * this.tileMapHeight / 2,
-//                          this.tilePixelWidth, this.tilePixelHeight);
-//        }
-//        skew = !skew;
-//    }
-//    if (foobar) {
-//        console.log("Tiles drawn: " + count);
-//        foobar = false;
-//    }
-//    ctx.drawImage(offCanvas, 0, 0);
-//}
-
-TileMap.prototype.drawMap = function (ctx) {
+TileMap.prototype.drawMap = function () {
     var offCtx = null;
     if (!this.imgCache) {
         this.imgCache = document.createElement('Canvas');
-        this.imgCache.width = (gameMap[0].length + gameMap.length) * this.tileMapWidth / 2;
-        this.imgCache.height = (gameMap.length + gameMap[0].length) * this.tileMapHeight / 2 + this.tileMapDepth;
+        this.imgCache.width = (this.mapData[0].length + this.mapData.length) * this.tileMapWidth / 2;
+        this.imgCache.height = (this.mapData.length + this.mapData[0].length) * this.tileMapHeight / 2 + this.tileMapDepth;
     }
     offCtx = this.imgCache.getContext('2d');
     offCtx.clearRect(0, 0, offCtx.width, offCtx.height);
 
-    for (var j = 0; j < gameMap.length; j++) {
-        for (var i = gameMap[j].length - 1; i >= 0; i--) {
-            var tileID = (gameMap[j][i] & 0xFF0000) >> 16;
-            var low = gameMap[j][i] & 0xFF;
-            var high = (gameMap[j][i] & 0xFF00) >> 8;
+    for (var j = 0; j < this.mapData.length; j++) {
+        for (var i = this.mapData[j].length - 1; i >= 0; i--) {
+            var tileID = (this.mapData[j][i] & 0xFF0000) >> 16;
+            var low = this.mapData[j][i] & 0xFF;
+            var high = (this.mapData[j][i] & 0xFF00) >> 8;
             for (var k = low; k <= high; k++) {
                 offCtx.drawImage(this.img,
                               tileID * this.tilePixelWidth, 0,
                               this.tilePixelWidth, this.tilePixelHeight,
-                              this.tileMapWidth / 2 * (i + j), this.tileMapHeight / 2 * (j + gameMap[j].length - i - 1) - this.tileMapDepth * k,
+                              this.tileMapWidth / 2 * (i + j), this.tileMapHeight / 2 * (j + this.mapData[j].length - i - 1) - this.tileMapDepth * k,
                               this.tilePixelWidth, this.tilePixelHeight);
             }
         }
     }
 
-    this.detectionRadius = Math.max(this.imgCache.width, this.imgCache.height) / 2;
+    this.detectionRadius = Math.max(this.imgCache.width, this.imgCache.height) / 2 * Math.SQRT2;
 }
 
 TileMap.prototype.draw = function (ctx) {
-    ctx.drawImage(this.imgCache, this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y - this.imgCache.height / 2) * tileYRatio);
+    ctx.drawImage(this.imgCache,
+                  this.x - this.game.camera.x - this.imgCache.width / 2,
+                  (this.y - this.game.camera.y - this.imgCache.height / 2) * tileYRatio);
     if (debugMode) {
+        var centerX = this.x - this.game.camera.x;
+        var centerY = this.y - this.game.camera.y + this.imgCache.height * (1 - tileYRatio) / 2 / tileYRatio;
         ctx.save();
         ctx.scale(1, tileYRatio);
         ctx.strokeStyle = "black";
         for (var i = 10; i < this.detectionRadius; i *= Math.log(i * 7)) {
             ctx.beginPath();
-            ctx.arc(this.x - this.game.camera.x, this.y - this.game.camera.y, i, 0, Math.PI * 2);
+            ctx.arc(centerX, centerY, i, 0, Math.PI * 2);
             ctx.stroke();
         }
         ctx.beginPath();
-        ctx.arc(this.x - this.game.camera.x, this.y - this.game.camera.y, this.detectionRadius, 0, Math.PI * 2);
+        ctx.arc(centerX, centerY, this.detectionRadius, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
 
-        ctx.fillText("(" + (this.x - this.game.camera.x).toFixed(2) + "," + (this.y - this.game.camera.y).toFixed(2) + ")", 10, 105);
+        ctx.beginPath();
+        ctx.moveTo(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y - this.imgCache.height / 2) * tileYRatio);
+        ctx.rect(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y - this.imgCache.height / 2) * tileYRatio,
+                 this.imgCache.width, this.imgCache.height);
+        ctx.stroke();
     }
 }
+
+TileMap.prototype.isNearPlayer = function (player) {
+    var radiusDistance = this.detectionRadius + 10; //TODO add player collision radius
+    radiusDistance *= radiusDistance;
+    radiusDistance += this.game.ctx.canvas.width * this.game.ctx.canvas.width + this.game.ctx.canvas.height * this.game.ctx.canvas.height;
+    var temp1 = player.x - this.x;
+    var temp2 = player.y - this.y;
+    var difference = temp1 * temp1 + temp2 * temp2;
+    return difference <= radiusDistance;
+}
+
+//sqrt(dx^2 + dy^2) <= (island radius + player radius) + canvas diagonal distance
+//dx^2 + dy^2 <= r^2 + 2r * sqrt(d) + d
+TileMap.prototype.isNearPlayer = function (player) {
+    var radiusDistance = this.detectionRadius + 10; //TODO add player collision radius
+    var totalDistance = Math.pow(radiusDistance, 2) + 2 * radiusDistance * this.game.ctx.canvas.diagonal + Math.pow(this.game.ctx.canvas.diagonal, 2);
+    var difference = Math.pow(player.x - this.x, 2) + Math.pow(player.y - this.y, 2);
+    return difference <= totalDistance;
+}
+
+
+
+function TestMap(game, asset, x, y) {
+    TileMap.call(this, game, asset, x, y);
+    this.dispose = false;
+}
+TestMap.prototype = new TileMap();
+TestMap.prototype.constructor = TestMap;
+
+TestMap.prototype.init = function () {
+    this.generateMap();
+    this.drawMap();
+    this.game.addBackground(this);
+}
+
+TestMap.prototype.generateMap = function () {
+    this.mapData = gameMap;
+}
+
+
 
 var gameMap = [
     [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
@@ -789,10 +936,16 @@ ASSET_MANAGER.downloadAll(function () {
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/test.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50, 50);
-    engine.addEntity(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
-    engine.addEntity(new TileMap(engine, player, 0, 0));
+    engine.addBackground(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
     engine.addEntity(player);
     engine.camera = new Camera(engine, player);
     engine.addEntity(engine.camera);
+    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
+    testMap.init();
+    var miniMap = new Map(engine, player);
+    miniMap.initMap();
+    miniMap.addIsland(testMap);
+    miniMap.generateMap();
+    engine.addEntity(miniMap);
     engine.start();
 });
