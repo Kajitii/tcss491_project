@@ -538,6 +538,146 @@ Player.prototype.move = function (dx, dy) {
     // this.shadow.y += dy;
 }
 
+function Enemy(game, sprite, shadowSprite, x, y, z) {
+    Entity.call(this, game, sprite, x, y, 0);
+    this.shadowImg = shadowSprite;
+    this.groundHeightOffset = 10;
+    this.h = z;
+    this.speed = 200;
+    this.groundSpeed = 200;
+    this.flySpeed = 500;
+    this.flySpeedMin = this.groundSpeed / 2;
+    this.flySpeedHeight = 120;
+    this.flyAcceleration = 5;
+    this.angleSpeed = 3 * Math.PI / 180;
+    this.isFlying = true;
+    this.heightOffset = -0.65; //pixels per height
+    this.shadowOffsetX = 0.5; //pixels per height
+    this.shadowOffsetY = 0.25;  //pixels per height
+}
+
+Enemy.prototype = new Entity();
+Enemy.prototype.constructor = Enemy;
+Enemy.prototype.draw = function (ctx) {
+        var groundX = this.x - this.game.camera.x;
+    var groundY = this.y - this.game.camera.y;
+    var spriteX = this.x - this.game.camera.x;
+    var spriteY = this.y - this.game.camera.y + this.h * this.heightOffset;
+    var shadowX = this.x - this.game.camera.x + this.h * this.shadowOffsetX;
+    var shadowY = this.y - this.game.camera.y + this.h * this.shadowOffsetY;
+
+    //Draw the ground indicator
+    var gradient = ctx.createLinearGradient(this.x, this.y, spriteX, spriteY);
+    gradient.addColorStop(0, "orange");
+    gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
+    ctx.strokeStyle = gradient;
+    ctx.moveTo(groundX, groundY);
+    ctx.lineTo(spriteX, spriteY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    gradient = ctx.createLinearGradient(this.x, this.y, shadowX, shadowY);
+    gradient.addColorStop(0, "blue");
+    gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
+    ctx.strokeStyle = gradient;
+    ctx.moveTo(groundX, groundY);
+    ctx.lineTo(shadowX, shadowY);
+    ctx.stroke();
+
+    var r = 10;
+    ctx.beginPath();
+    if (this.isFlying) {
+        ctx.strokeStyle = "rgba(0,255,0,0.5)";
+    } else {
+        ctx.strokeStyle = "rgba(255,0,0,0.5)";
+    }
+    ctx.arc(spriteX, spriteY, r, 0, Math.PI * 2);
+    ctx.moveTo(spriteX, spriteY);
+    ctx.lineTo(spriteX + r * Math.cos(this.a), spriteY + r * Math.sin(this.a));
+    ctx.stroke();
+
+    //Draw the player shadow
+    ctx.drawImage(this.shadowImg,
+                  0, 0,
+                  this.shadowImg.width, this.shadowImg.height,
+                  shadowX, shadowY,
+                  this.shadowImg.width, this.shadowImg.height);
+
+    //Draw the player sprite
+    ctx.drawImage(this.img,
+                  0, 0,
+                  this.img.width, this.img.height,
+                  spriteX, spriteY,
+                  this.img.width, this.img.height);
+
+
+}
+Enemy.prototype.move = Player.prototype.move;
+Enemy.prototype.update = function() {
+    var dx = 0;
+    var dy = 0;
+    var random_input = Math.floor(Math.random()*100);
+    if (random_input <= 25) { dx -= 1; } //left
+    else if (random_input <= 50) { dy -= 1; } //up
+    else if (random_input <= 75) { dx += 1; } //right
+    else if (random_input <= 100) { dy += 1; } //down
+
+    if (this.isFlying) {
+        // var dh = 0;
+        // //Descend or land
+        // if (this.game.keyboardState[83]) {//s
+        //     dh = -Math.min(this.flySpeedHeight * this.game.clockTick * 2, this.h - this.groundHeightOffset);
+        //     if (dh === 0) {
+        //         this.speed -= Math.min(this.flyAcceleration, this.speed - this.flySpeedMin);
+        //         if (this.speed <= this.groundSpeed) {
+        //             this.isFlying = false;
+        //         }
+        //     } else {
+        //         this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
+        //     }
+        // } else {
+        //     this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
+        // }
+        // //Ascend
+        // if (this.game.keyboardState[87]) {//w
+        //     dh = this.flySpeedHeight * this.game.clockTick;
+        // }
+        // this.h += dh;
+
+        //Calculate direction, velocity, and location
+        var dist = this.speed * this.game.clockTick;
+        var angle = 0;
+        if (dx !== 0 || dy !== 0) {
+            angle = Math.atan2(dy, dx);
+            if (angle < 0) angle += Math.PI * 2;
+            var da = this.a - angle;
+            if (da < 0) da += Math.PI * 2;
+            var actualDa = Math.min(this.angleSpeed, Math.abs(this.a - angle));
+            if (da < -Math.PI || (da >= 0 && da < Math.PI)) { //turn left
+                this.a -= actualDa;
+                if (this.a < 0) this.a += Math.PI * 2;
+            } else { //turn right
+                this.a += actualDa;
+                this.a %= Math.PI * 2;
+            }
+        }
+        this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
+    }
+
+    // else {
+    //     var dist = this.speed * this.game.clockTick;
+    //     if (dx !== 0 || dy !== 0) {
+    //         this.a = Math.atan2(dy, dx);
+    //         this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
+    //     }
+
+    //     //Take off
+    //     if (this.game.keyboardState[87]) { //w
+    //         this.speed = this.groundSpeed * 0.5;
+    //         this.isFlying = true;
+    //     }
+    // }
+}
 
 function Map(game, player) {
     this.player = player;
@@ -736,14 +876,17 @@ ASSET_MANAGER.queueDownload("images/test_shadow.png");
 ASSET_MANAGER.queueDownload("images/map.gif");
 ASSET_MANAGER.queueDownload("images/map_tiles.png");
 ASSET_MANAGER.queueDownload("images/sky_bg.png");
+ASSET_MANAGER.queueDownload("images/enemy.png");
 ASSET_MANAGER.downloadAll(function () {
     //console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/test.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50, 50);
+    var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 300, 300, 30);
     engine.addEntity(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
     engine.addEntity(new TileMap(engine, player, 0, 0));
     engine.addEntity(player);
+    engine.addEntity(enemy);
     engine.camera = new Camera(engine, player);
     engine.addEntity(engine.camera);
     engine.start();
