@@ -103,6 +103,8 @@ function GameEngine() {
     this.camera = null;
     this.clockTick = null;
 
+    this.player = null;
+
     this.mouseClick = null;
     this.mouseMove = null;
     this.keyboardState = [];
@@ -324,7 +326,9 @@ Entity.prototype.rotateAndCache = function (image) {
 }
 
 Entity.prototype.draw = function (ctx) {
-    this.game.ctx.drawImage(this.img, this.x - this.game.camera.x - this.img.width / 2, (this.y - this.game.camera.y - this.img.height / 2) * tileYRatio);
+    ctx.drawImage(this.img,
+                  this.x - this.game.camera.x - this.img.width / 2,
+                  ((this.y - this.game.camera.y) * tileYRatio - this.img.height / 2));
 }
 
 Entity.prototype.update = function () {
@@ -344,7 +348,7 @@ Entity.prototype.wrapAroundScreen = function () {
 }
 
 Entity.prototype.removeFromGame = function() {
-    this.dipose = true;
+    this.dispose = true;
 }
 
 
@@ -699,11 +703,10 @@ Map.prototype.update = function () {
                 if (island.isNearPlayer(this.player)) {
                     this.whatever.push(island);
                     if (island.dispose) {
-                        this.game.addBackground(island);
-                        island.dispose = false;
+                        island.addToGame();
                     }
                 } else {
-                    island.dispose = true;
+                    island.removeFromGame();
                 }
             }
         }
@@ -742,11 +745,16 @@ function TileMap(game, asset, x, y) {
     this.mapData = null;
     this.imgCache = null;
     this.detectionRadius = null;
+    this.mapXZero = null; //relative to x, the pixel coordinates of the top center of the tile at (0,0)
+    this.mapYZero = null; //relative to y, the pixel coordinates of the top center of the tile at (0,0)
     this.tilePixelWidth = 38;  //How wide an individual tile is on the sprite sheet
     this.tilePixelHeight = 27; //How high an individual tile is on the sprite sheet
     this.tileMapWidth = 38;    //How wide an individual tile is on the game canvas
     this.tileMapHeight = 20;   //How high an individual tile is on the game canvas
     this.tileMapDepth = 7;     //How deep an individual tile is on the game canvas
+
+    this.items = [];
+
     this.dispose = true;
 }
 TileMap.prototype = new Entity();
@@ -761,6 +769,7 @@ TileMap.prototype.constructor = TileMap;
 TileMap.prototype.init = function () {
     this.generateMap();
     this.drawMap();
+    this.addItem(new Item(this.game, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 2, 2);
 }
 
 //Randomly generate a new map.
@@ -787,8 +796,8 @@ TileMap.prototype.drawMap = function () {
     for (var j = 0; j < this.mapData.length; j++) {
         for (var i = this.mapData[j].length - 1; i >= 0; i--) {
             var tileID = (this.mapData[j][i] & 0xFF0000) >> 16;
-            var low = this.mapData[j][i] & 0xFF;
-            var high = (this.mapData[j][i] & 0xFF00) >> 8;
+            var low = 0;//this.mapData[j][i] & 0xFF;
+            var high = 0;//(this.mapData[j][i] & 0xFF00) >> 8;
             for (var k = low; k <= high; k++) {
                 offCtx.drawImage(this.img,
                               tileID * this.tilePixelWidth, 0,
@@ -800,18 +809,23 @@ TileMap.prototype.drawMap = function () {
     }
 
     this.detectionRadius = Math.max(this.imgCache.width, this.imgCache.height) / 2 * Math.SQRT2;
+    this.mapXZero = (this.tileMapWidth - this.imgCache.width) / 2;
+    this.mapYZero = (-(this.mapData.length + this.mapData[0].length) / 2 * this.tileMapWidth + this.tileMapWidth * this.mapData[0].length) / 2;
 }
 
 TileMap.prototype.draw = function (ctx) {
     ctx.drawImage(this.imgCache,
                   this.x - this.game.camera.x - this.imgCache.width / 2,
-                  (this.y - this.game.camera.y - this.imgCache.height / 2) * tileYRatio);
+                  ((this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2));
     if (debugMode) {
         var centerX = this.x - this.game.camera.x;
-        var centerY = this.y - this.game.camera.y + this.imgCache.height * (1 - tileYRatio) / 2 / tileYRatio;
+        var centerY = this.y - this.game.camera.y;
+        ctx.fillText(this.mapXZero.toFixed(2) + " " + this.mapYZero.toFixed(2), 10, 500);
         ctx.save();
         ctx.scale(1, tileYRatio);
+        ctx.translate(0, this.tileMapDepth);
         ctx.strokeStyle = "black";
+        ctx.fillStyle = "black";
         for (var i = 10; i < this.detectionRadius; i *= Math.log(i * 7)) {
             ctx.beginPath();
             ctx.arc(centerX, centerY, i, 0, Math.PI * 2);
@@ -823,21 +837,36 @@ TileMap.prototype.draw = function (ctx) {
         ctx.restore();
 
         ctx.beginPath();
-        ctx.moveTo(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y - this.imgCache.height / 2) * tileYRatio);
-        ctx.rect(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y - this.imgCache.height / 2) * tileYRatio,
+        ctx.moveTo(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2);
+        ctx.rect(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2,
                  this.imgCache.width, this.imgCache.height);
         ctx.stroke();
     }
 }
 
-TileMap.prototype.isNearPlayer = function (player) {
-    var radiusDistance = this.detectionRadius + 10; //TODO add player collision radius
-    radiusDistance *= radiusDistance;
-    radiusDistance += this.game.ctx.canvas.width * this.game.ctx.canvas.width + this.game.ctx.canvas.height * this.game.ctx.canvas.height;
-    var temp1 = player.x - this.x;
-    var temp2 = player.y - this.y;
-    var difference = temp1 * temp1 + temp2 * temp2;
-    return difference <= radiusDistance;
+TileMap.prototype.addItem = function (item, x, y) {
+    this.items.push(item);
+    item.x = this.x + this.mapXZero + this.tileMapWidth / 2 * (x + y);
+    item.y = this.y + this.mapYZero + this.tileMapWidth / 2 * (y - x);
+}
+
+TileMap.prototype.addToGame = function () {
+    this.game.addBackground(this);
+    for (var i = 0; i < this.items.length; i++) {
+        var item = this.items[i];
+        if (!item.collected) {
+            item.dispose = false;
+            this.game.addEntity(item);
+        }
+    }
+    this.dispose = false;
+}
+
+TileMap.prototype.removeFromGame = function () {
+    for (var i = 0; i < this.items.length; i++) {
+        this.items[i].dispose = true;
+    }
+    this.dispose = true;
 }
 
 //sqrt(dx^2 + dy^2) <= (island radius + player radius) + canvas diagonal distance
@@ -853,7 +882,6 @@ TileMap.prototype.isNearPlayer = function (player) {
 
 function TestMap(game, asset, x, y) {
     TileMap.call(this, game, asset, x, y);
-    this.dispose = false;
 }
 TestMap.prototype = new TileMap();
 TestMap.prototype.constructor = TestMap;
@@ -866,6 +894,42 @@ TestMap.prototype.init = function () {
 
 TestMap.prototype.generateMap = function () {
     this.mapData = gameMap;
+}
+
+
+function Item(game, asset, drawOffsetX, drawOffsetY) {
+    Entity.call(this, game, asset, 0, 0);
+    this.drawOffsetX = drawOffsetX;
+    this.drawOffsetY = drawOffsetY;
+    this.collected = false;
+}
+Item.prototype = new Entity();
+Item.prototype.constructor = Item;
+
+Item.prototype.draw = function (ctx) {
+    Entity.prototype.draw.call(this, ctx);
+    if (debugMode) {
+        ctx.fillStyle = "black";
+        ctx.fillText(this.x.toFixed(2) + " " + this.y.toFixed(2), 10, 130);
+
+        ctx.save();
+        ctx.scale(1, tileYRatio);
+        var centerX = this.x - this.game.camera.x;
+        var centerY = this.y - this.game.camera.y;
+        ctx.strokeStyle = "black";
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 19, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+Item.prototype.update = function () {
+    if (Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
+        this.collected = true;
+        this.dispose = true;
+        console.log("You have obtained an item!");
+    }
 }
 
 
@@ -931,11 +995,13 @@ ASSET_MANAGER.queueDownload("images/test_shadow.png");
 ASSET_MANAGER.queueDownload("images/map.gif");
 ASSET_MANAGER.queueDownload("images/map_tiles.png");
 ASSET_MANAGER.queueDownload("images/sky_bg.png");
+ASSET_MANAGER.queueDownload("images/diamond.png");
 ASSET_MANAGER.downloadAll(function () {
     //console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/test.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50, 50);
+    engine.player = player;
     engine.addBackground(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
     engine.addEntity(player);
     engine.camera = new Camera(engine, player);
@@ -947,5 +1013,9 @@ ASSET_MANAGER.downloadAll(function () {
     miniMap.addIsland(testMap);
     miniMap.generateMap();
     engine.addEntity(miniMap);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 1, 0);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 0, 0);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 0, 1);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 0, 2);
     engine.start();
 });
