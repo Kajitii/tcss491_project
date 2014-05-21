@@ -102,6 +102,7 @@ function GameEngine() {
     this.mouseClick = null;
     this.mouseMove = null;
     this.keyboardState = [];
+    this.fire = false;
 }
 
 GameEngine.prototype.startInput = function () {
@@ -133,6 +134,9 @@ GameEngine.prototype.startInput = function () {
         }
         if (e.keyCode === 70) {
             requestFullScreen();
+        }
+        if (e.keyCode === 32) {
+            that.fire = true;
         }
         that.keyboardState[e.keyCode] = true;
     }, false);
@@ -232,8 +236,10 @@ GameEngine.prototype.draw = function (callback) {
 GameEngine.prototype.update = function () {
     for (var i = 0; i < this.entities.length; i++) {
         this.entities[i].update();
+    }
+    for (var i = this.entities.length - 1; i >= 0; --i) {
         if (this.entities[i].dispose) {
-            this.dispose(this.entities[i]);
+            this.entities.splice(i, 1);
         }
     }
 }
@@ -246,7 +252,6 @@ GameEngine.prototype.clearInputs = function () {
 GameEngine.prototype.addEntity = function (entity) {
     this.entities.push(entity);
 }
-
 
 
 function Timer() {
@@ -314,7 +319,7 @@ Entity.prototype.wrapAroundScreen = function () {
 }
 
 Entity.prototype.removeFromGame = function() {
-    this.dipose = true;
+    this.dispose = true;
 }
 
 
@@ -470,6 +475,7 @@ Player.prototype.update = function () {
     if (this.game.keyboardState[38]) { dy -= 1; } //up
     if (this.game.keyboardState[39]) { dx += 1; } //right
     if (this.game.keyboardState[40]) { dy += 1; } //down
+    if (this.game.keyboardState[32]) { this.fire(); }
 
     if (this.isFlying) {
         var dh = 0;
@@ -536,6 +542,14 @@ Player.prototype.move = function (dx, dy) {
     this.y += dy;
     // this.playerSprite.y += dy;
     // this.shadow.y += dy;
+}
+
+Player.prototype.fire = function () {
+    if (this.game.fire) {
+        var bullet = new Bullet(this.game, this.x + this.shadowImg.width/2, this.y + this.shadowImg.height/2 , this.h, this.a);
+        this.game.addEntity(bullet);
+        this.game.fire = false;
+    }
 }
 
 function Enemy(game, sprite, shadowSprite, x, y, z) {
@@ -651,27 +665,6 @@ Enemy.prototype.update = function() {
     else if (random_input <= 100) { dy += 1; } //down
 
     if (this.isFlying) {
-        // var dh = 0;
-        // //Descend or land
-        // if (this.game.keyboardState[83]) {//s
-        //     dh = -Math.min(this.flySpeedHeight * this.game.clockTick * 2, this.h - this.groundHeightOffset);
-        //     if (dh === 0) {
-        //         this.speed -= Math.min(this.flyAcceleration, this.speed - this.flySpeedMin);
-        //         if (this.speed <= this.groundSpeed) {
-        //             this.isFlying = false;
-        //         }
-        //     } else {
-        //         this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
-        //     }
-        // } else {
-        //     this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
-        // }
-        // //Ascend
-        // if (this.game.keyboardState[87]) {//w
-        //     dh = this.flySpeedHeight * this.game.clockTick;
-        // }
-        // this.h += dh;
-
         //Calculate direction, velocity, and location
         var dist = this.speed * this.game.clockTick;
         var angle = 0;
@@ -691,21 +684,39 @@ Enemy.prototype.update = function() {
         }
         this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
     }
-
-    // else {
-    //     var dist = this.speed * this.game.clockTick;
-    //     if (dx !== 0 || dy !== 0) {
-    //         this.a = Math.atan2(dy, dx);
-    //         this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
-    //     }
-
-    //     //Take off
-    //     if (this.game.keyboardState[87]) { //w
-    //         this.speed = this.groundSpeed * 0.5;
-    //         this.isFlying = true;
-    //     }
-    // }
 }
+
+function Bullet(game, x, y, h, a) {
+    Entity.call(this, game, null, x, y, 0);
+    this.h = h;
+    this.a = a;
+    this.speed = 700;
+    this.heightOffset = -0.65; //pixels per height
+}
+
+Bullet.prototype = new Entity();
+Bullet.prototype.draw = function(ctx) {
+    var spriteX = this.x - this.game.camera.x;
+    var spriteY = this.y - this.game.camera.y + this.h * this.heightOffset;
+    ctx.font="20px sans-serif";
+    ctx.fillStyle="#FFA500";
+    ctx.fillText("●", spriteX - 5, spriteY - 5);
+    ctx.font="10px sans-serif";
+    ctx.fillStyle="#000000";
+}
+Bullet.prototype.update = function() {
+    var dead_range = 1000;
+    var dx = this.game.player.x - this.x;
+    var dy = this.game.player.y - this.y;
+    if (dx * dx + dy * dy >= dead_range * dead_range) {
+        this.removeFromGame();
+    }
+    else {
+        var dist = this.speed * this.game.clockTick;
+        this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
+    }
+}
+Bullet.prototype.move = Player.prototype.move;
 
 function Map(game, player) {
     this.player = player;
