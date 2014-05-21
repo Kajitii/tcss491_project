@@ -609,7 +609,17 @@ Enemy.prototype.draw = function (ctx) {
                   this.img.width, this.img.height,
                   spriteX, spriteY,
                   this.img.width, this.img.height);
-
+    ctx.fillStyle="#FF0000";
+    ctx.font="30px sans-serif";
+    if (this.game.player.h === this.h) {
+        ctx.fillText("●", spriteX - 5, spriteY - 5);
+    } else if (this.game.player.h > this.h) {
+        ctx.fillText("▼", spriteX - 5, spriteY - 5);
+    } else if (this.game.player.h < this.h) {
+        ctx.fillText("▲", spriteX - 5, spriteY - 5);
+    }
+    ctx.font="10px sans-serif";
+    ctx.fillStyle="#000000";
 
 }
 Enemy.prototype.move = Player.prototype.move;
@@ -887,6 +897,7 @@ ASSET_MANAGER.downloadAll(function () {
     engine.addEntity(new TileMap(engine, player, 0, 0));
     engine.addEntity(player);
     engine.addEntity(enemy);
+    engine.player = player;
     engine.camera = new Camera(engine, player);
     engine.addEntity(engine.camera);
     engine.start();
