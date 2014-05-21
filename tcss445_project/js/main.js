@@ -94,10 +94,16 @@ requestAnimationFrame(callback, element) is used to only run the game if the tab
 
 function GameEngine() {
     this.timer = new Timer();
+
+    this.background = [];
     this.entities = [];
+    this.foreground = [];
+
     this.ctx = null;
     this.camera = null;
     this.clockTick = null;
+
+    this.player = null;
 
     this.mouseClick = null;
     this.mouseMove = null;
@@ -190,6 +196,7 @@ GameEngine.prototype.startInput = function () {
 
         thatCanvas.width = width;
         thatCanvas.height = height;
+        thatCanvas.diagonal = Math.sqrt(Math.pow(width, 2) + Math.pow(height, 2));
     }
 
     this.ctx.canvas.parentNode.addEventListener("fullscreenchange", fsEvent, false);       //W3 standard
@@ -206,6 +213,7 @@ GameEngine.prototype.getXandY = function (e) {
 
 GameEngine.prototype.init = function (ctx) {
     this.ctx = ctx;
+    ctx.canvas.diagonal = Math.sqrt(Math.pow(ctx.canvas.width, 2) + Math.pow(ctx.canvas.height, 2));
     this.startInput();
 }
 
@@ -228,8 +236,14 @@ GameEngine.prototype.loop = function () {
 GameEngine.prototype.draw = function (callback) {
     this.ctx.beginPath();
     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+    for (var i = 0; i < this.background.length; i++) {
+        this.background[i].draw(this.ctx);
+    }
     for (var i = 0; i < this.entities.length; i++) {
         this.entities[i].draw(this.ctx);
+    }
+    for (var i = 0; i < this.foreground.length; i++) {
+        this.foreground[i].draw(this.ctx);
     }
 }
 
@@ -242,6 +256,16 @@ GameEngine.prototype.update = function () {
             this.entities.splice(i, 1);
         }
     }
+    for (var i = 0; i < this.background.length; i++) {
+        if (this.background[i].dispose) {
+            this.background.splice(i, 1);
+        }
+    }
+    for (var i = 0; i < this.foreground.length; i++) {
+        if (this.foreground[i].dispose) {
+            this.foreground.splice(i, 1);
+        }
+    }
 }
 
 GameEngine.prototype.clearInputs = function () {
@@ -249,8 +273,16 @@ GameEngine.prototype.clearInputs = function () {
     this.mouseMove = null;
 }
 
+GameEngine.prototype.addBackground = function (entity) {
+    this.background.push(entity);
+}
+
 GameEngine.prototype.addEntity = function (entity) {
     this.entities.push(entity);
+}
+
+GameEngine.prototype.addForeground = function (entity) {
+    this.foreground.push(entity);
 }
 
 
@@ -299,7 +331,9 @@ Entity.prototype.rotateAndCache = function (image) {
 }
 
 Entity.prototype.draw = function (ctx) {
-    this.game.ctx.drawImage(this.img, this.x - this.game.camera.x - this.img.width / 2, (this.y - this.game.camera.y - this.img.height / 2) * tileMapHeight / tileMapWidth);
+    ctx.drawImage(this.img,
+                  this.x - this.game.camera.x - this.img.width / 2,
+                  ((this.y - this.game.camera.y) * tileYRatio - this.img.height / 2));
 }
 
 Entity.prototype.update = function () {
@@ -330,6 +364,9 @@ function Camera(game, player) {
     //the top left corner of the screen
     this.x = player.x - game.ctx.canvas.width / 2;
     this.y = player.y - game.ctx.canvas.height / 2;
+    //
+    this.prevPlayerX = player.x;
+    this.prevPlayerY = player.y;
     //the point at which the camera's center attempts to follow, relative to the player
     var distance = Math.max(player.speed * 0.25 - 100, 0);
     this.centerX = this.game.ctx.canvas.width / 2 + distance * Math.cos(this.player.a);
@@ -349,6 +386,8 @@ Camera.prototype.draw = function (ctx) {
     if (!debugMode) {
         return;
     }
+    ctx.save();
+    ctx.scale(1, tileYRatio);
     ctx.beginPath();
     ctx.strokeStyle = "blue";
     ctx.arc(this.centerX - this.x, this.centerY - this.y, 50, 0, Math.PI * 2);
@@ -357,12 +396,19 @@ Camera.prototype.draw = function (ctx) {
     ctx.strokeStyle = "aqua";
     ctx.arc(this.actualX - this.x, this.actualY - this.y, 45, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
 }
 
 Camera.prototype.update = function () {
     var distance = Math.max(this.player.speed * 0.25, this.player.groundSpeed * 0.125);
+    var centerDX = this.player.x - this.prevPlayerX;
+    var centerDY = this.player.y - this.prevPlayerY;
+    this.prevPlayerX = this.player.x;
+    this.prevPlayerY = this.player.y;
     this.centerX = this.player.x + distance * Math.cos(this.player.a);
-    this.centerY = this.player.y + distance * Math.sin(this.player.a);
+    this.centerY = this.player.y + distance * Math.sin(this.player.a) * tileYRatio;
+    this.actualX += centerDX;
+    this.actualY += centerDY;
     var dx = this.centerX - this.actualX;
     var dy = this.centerY - this.actualY;
     this.a = Math.atan2(dy, dx);
@@ -381,7 +427,7 @@ Camera.prototype.update = function () {
         this.actualY += Math.max(this.speed * Math.sin(this.a), dy);
     }
     this.x = this.actualX - this.game.ctx.canvas.width / 2;
-    this.y = this.actualY - this.game.ctx.canvas.height / 2;
+    this.y = this.actualY - this.game.ctx.canvas.height / 2 / tileYRatio;
 }
 
 
@@ -407,15 +453,41 @@ Player.prototype = new Entity();
 Player.prototype.constructor = Player;
 
 Player.prototype.draw = function (ctx) {
+    var imgWidthOffset = this.img.width / 2; //TODO change this to fit the actual sprite when implemented.
+    var imgHeightOffset = this.img.height / 2; //TODO
     var groundX = this.x - this.game.camera.x;
     var groundY = this.y - this.game.camera.y;
-    var spriteX = this.x - this.game.camera.x;
-    var spriteY = this.y - this.game.camera.y + this.h * this.heightOffset;
-    var shadowX = this.x - this.game.camera.x + this.h * this.shadowOffsetX;
-    var shadowY = this.y - this.game.camera.y + this.h * this.shadowOffsetY;
+    var spriteX = groundX;
+    var spriteY = groundY + this.h * this.heightOffset;
+    var shadowX = groundX + this.h * this.shadowOffsetX;
+    var shadowY = groundY + this.h * this.shadowOffsetY;
+
+    //Draw the player shadow
+    ctx.drawImage(this.shadowImg,
+                  0, 0,
+                  this.shadowImg.width, this.shadowImg.height,
+                  shadowX - this.shadowImg.width / 2, shadowY * tileYRatio - this.shadowImg.height / 2,
+                  this.shadowImg.width, this.shadowImg.height);
 
     //Draw the ground indicator
-    var gradient = ctx.createLinearGradient(this.x, this.y, spriteX, spriteY);
+    //Ground circle and direction
+    var r = 10;
+    ctx.save();
+
+    ctx.scale(1, tileYRatio);
+    ctx.beginPath();
+    if (this.isFlying) {
+        ctx.strokeStyle = "rgba(0,255,0,0.5)";
+    } else {
+        ctx.strokeStyle = "rgba(255,0,0,0.5)";
+    }
+    ctx.arc(groundX, groundY, r, 0, Math.PI * 2);
+    ctx.moveTo(groundX, groundY);
+    ctx.lineTo(groundX + r * Math.cos(this.a), groundY + r * Math.sin(this.a));
+    ctx.stroke();
+
+    //Ground to player sprite
+    var gradient = ctx.createLinearGradient(groundX, groundY, spriteX, spriteY);
     gradient.addColorStop(0, "orange");
     gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
     ctx.strokeStyle = gradient;
@@ -423,48 +495,32 @@ Player.prototype.draw = function (ctx) {
     ctx.lineTo(spriteX, spriteY);
     ctx.stroke();
 
+    //Ground to player shadow
     ctx.beginPath();
-    gradient = ctx.createLinearGradient(this.x, this.y, shadowX, shadowY);
+    gradient = ctx.createLinearGradient(groundX, groundY, shadowX, shadowY);
     gradient.addColorStop(0, "blue");
-    gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
+    gradient.addColorStop(1, "rgba(0, 0, 255, 0.10)");
     ctx.strokeStyle = gradient;
     ctx.moveTo(groundX, groundY);
     ctx.lineTo(shadowX, shadowY);
     ctx.stroke();
 
-    var r = 10;
-    ctx.beginPath();
-    if (this.isFlying) {
-        ctx.strokeStyle = "rgba(0,255,0,0.5)";
-    } else {
-        ctx.strokeStyle = "rgba(255,0,0,0.5)";
-    }
-    ctx.arc(spriteX, spriteY, r, 0, Math.PI * 2);
-    ctx.moveTo(spriteX, spriteY);
-    ctx.lineTo(spriteX + r * Math.cos(this.a), spriteY + r * Math.sin(this.a));
-    ctx.stroke();
-
-    //Draw the player shadow
-    ctx.drawImage(this.shadowImg,
-                  0, 0,
-                  this.shadowImg.width, this.shadowImg.height,
-                  shadowX, shadowY,
-                  this.shadowImg.width, this.shadowImg.height);
+    ctx.restore();
 
     //Draw the player sprite
     ctx.drawImage(this.img,
                   0, 0,
                   this.img.width, this.img.height,
-                  spriteX, spriteY,
+                  spriteX - imgWidthOffset, spriteY * tileYRatio - imgHeightOffset,
                   this.img.width, this.img.height);
 
     if (debugMode) {
+        ctx.fillStyle = "black";
         ctx.fillText("X: " + this.x.toFixed(2), 10, 15);
         ctx.fillText("Y: " + this.y.toFixed(2), 10, 30);
         ctx.fillText("H: " + this.h.toFixed(2), 10, 45);
         ctx.fillText("A: " + (this.a * 180 / Math.PI).toFixed(2) + "\u00B0", 10, 60);
         ctx.fillText("S: " + this.speed.toFixed(2), 10, 75);
-        ctx.fillText("Misc: " + this.x.toFixed(2) + " " + this.game.camera.actualX.toFixed(2) + " " + this.game.camera.x.toFixed(2), 10, 90);
     }
 }
 
@@ -546,7 +602,8 @@ Player.prototype.move = function (dx, dy) {
 
 Player.prototype.fire = function () {
     if (this.game.fire) {
-        var bullet = new Bullet(this.game, this.x + this.shadowImg.width/2, this.y + this.shadowImg.height/2 , this.h, this.a);
+        console.log("X: " + this.x + " Y: " + this.y);
+        var bullet = new Bullet(this.game, this.x, this.y, this.h, this.a);
         this.game.addEntity(bullet);
         this.game.fire = false;
     }
@@ -700,7 +757,7 @@ Bullet.prototype.draw = function(ctx) {
     var spriteY = this.y - this.game.camera.y + this.h * this.heightOffset;
     ctx.font="20px sans-serif";
     ctx.fillStyle="#FFA500";
-    ctx.fillText("●", spriteX - 5, spriteY - 5);
+    ctx.fillText("●", spriteX, spriteY);
     ctx.font="10px sans-serif";
     ctx.fillStyle="#000000";
 }
@@ -719,30 +776,166 @@ Bullet.prototype.update = function() {
 Bullet.prototype.move = Player.prototype.move;
 
 function Map(game, player) {
+    this.game = game;
     this.player = player;
-    this.offsetX = -3600;
-    this.offsetY = -2600;
-    Entity.call(this, game, ASSET_MANAGER.getAsset("images/map.gif"),
-        player.x + this.offsetX, player.y + this.offsetY, 0);
+    this.minimap = null;
+    this.scale = 100;            //real world pixels per minimap pixel
+    this.mapQuadrantWidth = 10;  //quadrants
+    this.mapQuadrantHeight = 10; //quadrants
+    this.quadrantWidth = 10000;  //pixels
+    this.quadrantHeight = 10000; //pixels
+    this.mapWidth = this.mapQuadrantWidth * this.quadrantWidth;
+    this.mapHeight = this.mapQuadrantHeight * this.quadrantHeight;
+    this.currentQuadrantX = 0;
+    this.currentQuadrantY = 0;
+    this.quadrants = [];
+    this.whatever = false;
 }
-
 Map.prototype = new Entity();
 Map.prototype.constructor = Map;
-Map.prototype.update = function () {
-    this.x = this.offsetX - this.player.x;
-    this.y = this.offsetY - this.player.y;
+
+Map.prototype.initMap = function () {
+    if (this.minimap) {
+        return;
+    }
+
+    console.log("creating the map");
+    this.minimap = document.createElement('Canvas');
+    this.minimap.width = this.mapWidth / this.scale;
+    this.minimap.height = this.mapHeight / this.scale;
+
+    for (var i = 0; i < this.mapQuadrantHeight; i++) {
+        var array = [];
+        for (var j = 0; j < this.mapQuadrantWidth; j++) {
+            var q = new Quadrant(j * this.quadrantWidth, i * this.quadrantHeight,
+                                 this.quadrantWidth, this.quadrantHeight,
+                                 10000000);
+            array.push(q);
+        }
+        this.quadrants.push(array);
+    }
 }
 
-function TileMap(game, player, x, y) {
-    Entity.call(this, game, ASSET_MANAGER.getAsset("images/map_tiles.png"), x, y);
-    this.player = player;
+Map.prototype.addIsland = function (island) {
+    this.quadrants[island.y][island.x].islands.push(island);
+}
+
+Map.prototype.generateMap = function () {
+    var ctx = this.minimap.getContext('2d');
+    ctx.fillStyle = "green";
+    for (var j = 0; j < this.mapQuadrantHeight; j++) {
+        for (var i = 0; i < this.mapQuadrantWidth; i++) {
+            var q = this.quadrants[j][i];
+            q.init(this.game);
+            for (var k = 0; k < q.islands.length; k++) {
+                var island = q.islands[k];
+                ctx.beginPath();
+                ctx.arc(island.x / this.scale, island.y / this.scale, island.detectionRadius / this.scale, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+}
+
+Map.prototype.draw = function (ctx) {
+    ctx.drawImage(this.minimap, 0, 0);
+    ctx.beginPath();
+    ctx.fillStyle = "red";
+    ctx.arc(this.player.x / this.scale, this.player.y / this.scale, 1, 0, Math.PI * 2);
+    ctx.fill();
+    if (debugMode) {
+        var i = this.currentQuadrantX - 1;
+        if (i < 0) i += this.mapQuadrantWidth;
+        var j = this.currentQuadrantY - 1;
+        if (j < 0) j += this.mapQuadrantHeight;
+        ctx.filleStyle = "black";
+        ctx.fillText("(" + i + "," + j + ") " + this.whatever, 10, 120);
+        ctx.fillText("(" + (i + 2) + "," + (j + 2) + ")", 10, 135);
+    }
+}
+
+var barbar = true;
+Map.prototype.update = function () {
+    //if (this.player.x < 0) {
+    //    this.player.x += this.mapWidth;
+    //} else if (this.player.x >= this.mapWidth) {
+    //    this.player.x -= this.mapWidth;
+    //}
+    //if (this.player.y < 0) {
+    //    this.player.y += this.mapHeight;
+    //} else if (this.player.y >= this.mapHeight) {
+    //    this.player.y -= this.mapHeight;
+    //}
+    this.whatever = [1];
+    this.currentQuadrantX = Math.floor(this.player.x / this.quadrantWidth);
+    this.currentQuadrantY = Math.floor(this.player.y / this.quadrantHeight);
+    var i = this.currentQuadrantX - 1;
+    if (i < 0) i += this.mapQuadrantWidth;
+    var jStart = this.currentQuadrantY - 1;
+    if (jStart < 0) jStart += this.mapQuadrantHeight;
+    var iStop = i + 2;
+    var jStop = jStart + 2;
+    for (; i <= iStop; i++) {
+        for (j = jStart; j <= jStop; j++) {
+            var q = this.quadrants[j % this.mapQuadrantHeight][i % this.mapQuadrantWidth];
+            for (var k = 0; k < q.islands.length; k++) {
+                var island = q.islands[k];
+                if (island.isNearPlayer(this.player)) {
+                    this.whatever.push(island);
+                    if (island.dispose) {
+                        island.addToGame();
+                    }
+                } else {
+                    island.removeFromGame();
+                }
+            }
+        }
+    }
+    barbar = false;
+}
+
+
+
+function Quadrant(x, y, w, h, d) {
+    this.x = x;
+    this.y = y;
+    this.width = w;
+    this.height = h;
+    this.density = d; //pixels in the quadrant per island
+    this.islands = [];
+}
+
+Quadrant.prototype.init = function (game) {
+    var attempts = Math.floor(this.width * this.height / this.density) - this.islands.length;
+    for (var i = 0; i < attempts; i++) {
+        var island = new TileMap(game, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
+        var x = this.x + Math.random() * (this.width - island.detectionRadius);
+        var y = this.y + Math.random() * (this.height - island.detectionRadius);
+        island.x = x;
+        island.y = y;
+        island.init();
+        this.islands.push(island);
+    }
+}
+
+
+
+function TileMap(game, asset, x, y) {
+    Entity.call(this, game, asset, x, y);
+    this.mapData = null;
     this.imgCache = null;
+    this.detectionRadius = null;
+    this.mapXZero = null; //relative to x, the pixel coordinates of the top center of the tile at (0,0)
+    this.mapYZero = null; //relative to y, the pixel coordinates of the top center of the tile at (0,0)
     this.tilePixelWidth = 38;  //How wide an individual tile is on the sprite sheet
     this.tilePixelHeight = 27; //How high an individual tile is on the sprite sheet
     this.tileMapWidth = 38;    //How wide an individual tile is on the game canvas
     this.tileMapHeight = 20;   //How high an individual tile is on the game canvas
     this.tileMapDepth = 7;     //How deep an individual tile is on the game canvas
-    this.drawInit(this.game.ctx);
+
+    this.items = [];
+
+    this.dispose = true;
 }
 TileMap.prototype = new Entity();
 TileMap.prototype.constructor = TileMap;
@@ -753,109 +946,173 @@ TileMap.prototype.constructor = TileMap;
 //    this.y = -this.player.y * this.tileMapHeight / max;
 //}
 
-TileMap.prototype.drawInit = function (ctx) {
-    this.drawMap(ctx);
+TileMap.prototype.init = function () {
+    this.generateMap();
+    this.drawMap();
+    this.addItem(new Item(this.game, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 2, 2);
 }
 
-//var barfoo = true;
-//var fobaro = true;
-//var foobar = true;
-//var offCanvas = null;
-//TileMap.prototype.drawMap = function (ctx) {
-//    var offCtx = null;
-//    if (!offCanvas) {
-//        offCanvas = document.createElement('Canvas');
-//        offCanvas.width = ctx.canvas.width;
-//        offCanvas.height = ctx.canvas.height;
-//    }
-//    offCtx = offCanvas.getContext('2d');
-//    offCtx.clearRect(0, 0, offCtx.canvas.width, offCtx.canvas.height);
-//    var count = 0;
-//    //x, y for canvas coordinates
-//    //i, j for tile coordinates
-//    var j = this.y;
-//    if (j < 0) {
-//        var temp = this.tileMapHeight * gameMap.length;
-//        j = gameMap.length + Math.ceil(this.y / this.tileMapHeight) % gameMap.length;
-//    } else {
-//        j = Math.floor(this.y / this.tileMapHeight);
-//    }
+//Randomly generate a new map.
+TileMap.prototype.generateMap = function () {
+    this.mapData = [
+        [0x00000, 0x10000, 0x10000, 0x10000, 0x00000],
+        [0x10000, 0x10000, 0x20000, 0x10000, 0x10000],
+        [0x10000, 0x20000, 0x20000, 0x20000, 0x10000],
+        [0x10000, 0x10000, 0x20000, 0x10000, 0x10000],
+        [0x00000, 0x10000, 0x10000, 0x10000, 0x00000]
+    ];
+}
 
-//    for (var y = -this.y % this.tileMapHeight / this.tileMapHeight - 1;
-//        (y - 2) * this.tileMapHeight / 2 < this.game.ctx.canvas.height;
-//        y++, j++) {
-//        if (barfoo) {
-//            console.log("Starting y: " + y);
-//            console.log("Starting lower bound: " + (y - 2) * this.tileMapHeight / 2);
-//            console.log("Min tiles to cover canvas height: " + this.game.ctx.canvas.height / (this.tileMapHeight / 2));
-//            barfoo = false;
-//        }
-//        var skew = Math.floor(j % 2) !== 0;
-//        var i = this.x;
-//        if (i < 0) {
-//            var temp = this.tileMapWidth * gameMap[j % gameMap.length].length;
-//            i = gameMap[j % gameMap.length].length + Math.ceil(this.x / this.tileMapWidth) % gameMap[j % gameMap.length].length;
-//        } else {
-//            i = Math.floor(this.x / this.tileMapWidth);
-//        }
-
-//        var bar = true;
-//        for (var x = -this.x % this.tileMapWidth / this.tileMapWidth - 1;
-//            (x - 1) * this.tileMapWidth < this.game.ctx.canvas.width;
-//            x++, i++) {
-//            if (fobaro) {
-//                console.log("Starting x: " + x);
-//                console.log("Starting lower bound: " + (x - 1) * this.tileMapWidth);
-//                console.log("Min tiles to cover canvas width: " + this.game.ctx.canvas.width / this.tileMapWidth);
-//                fobaro = false;
-//            }
-
-//            count++;
-//            var tileID = gameMap[j % gameMap.length][i % gameMap[j % gameMap.length].length];
-//            offCtx.drawImage(this.img,
-//                          (tileID) * this.tilePixelWidth, 0,
-//                          this.tilePixelWidth, this.tilePixelHeight,
-//                          this.tileMapWidth * (skew / 2 + x - 1), (y - 1) * this.tileMapHeight / 2,
-//                          this.tilePixelWidth, this.tilePixelHeight);
-//        }
-//        skew = !skew;
-//    }
-//    if (foobar) {
-//        console.log("Tiles drawn: " + count);
-//        foobar = false;
-//    }
-//    ctx.drawImage(offCanvas, 0, 0);
-//}
-
-TileMap.prototype.drawMap = function (ctx) {
+TileMap.prototype.drawMap = function () {
     var offCtx = null;
     if (!this.imgCache) {
         this.imgCache = document.createElement('Canvas');
-        this.imgCache.width = (gameMap[0].length + gameMap.length) * this.tileMapWidth / 2;
-        this.imgCache.height = (gameMap.length + gameMap[0].length) * this.tileMapHeight / 2 + this.tileMapDepth;
+        this.imgCache.width = (this.mapData[0].length + this.mapData.length) * this.tileMapWidth / 2;
+        this.imgCache.height = (this.mapData.length + this.mapData[0].length) * this.tileMapHeight / 2 + this.tileMapDepth;
     }
     offCtx = this.imgCache.getContext('2d');
     offCtx.clearRect(0, 0, offCtx.width, offCtx.height);
 
-    for (var j = 0; j < gameMap.length; j++) {
-        for (var i = gameMap[j].length - 1; i >= 0; i--) {
-            var tileID = (gameMap[j][i] & 0xFF0000) >> 16;
-            var low = gameMap[j][i] & 0xFF;
-            var high = (gameMap[j][i] & 0xFF00) >> 8;
+    for (var j = 0; j < this.mapData.length; j++) {
+        for (var i = this.mapData[j].length - 1; i >= 0; i--) {
+            var tileID = (this.mapData[j][i] & 0xFF0000) >> 16;
+            var low = 0;//this.mapData[j][i] & 0xFF;
+            var high = 0;//(this.mapData[j][i] & 0xFF00) >> 8;
             for (var k = low; k <= high; k++) {
                 offCtx.drawImage(this.img,
                               tileID * this.tilePixelWidth, 0,
                               this.tilePixelWidth, this.tilePixelHeight,
-                              this.tileMapWidth / 2 * (i + j), this.tileMapHeight / 2 * (j + gameMap[j].length - i - 1) - this.tileMapDepth * k,
+                              this.tileMapWidth / 2 * (i + j), this.tileMapHeight / 2 * (j + this.mapData[j].length - i - 1) - this.tileMapDepth * k,
                               this.tilePixelWidth, this.tilePixelHeight);
             }
         }
     }
+
+    this.detectionRadius = Math.max(this.imgCache.width, this.imgCache.height) / 2 * Math.SQRT2;
+    this.mapXZero = (this.tileMapWidth - this.imgCache.width) / 2;
+    this.mapYZero = (-(this.mapData.length + this.mapData[0].length) / 2 * this.tileMapWidth + this.tileMapWidth * this.mapData[0].length) / 2;
 }
 
 TileMap.prototype.draw = function (ctx) {
-    ctx.drawImage(this.imgCache, this.x - this.game.camera.x, (this.y - this.game.camera.y) * tileMapHeight / tileMapWidth);
+    ctx.drawImage(this.imgCache,
+                  this.x - this.game.camera.x - this.imgCache.width / 2,
+                  ((this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2));
+    if (debugMode) {
+        var centerX = this.x - this.game.camera.x;
+        var centerY = this.y - this.game.camera.y;
+        ctx.fillText(this.mapXZero.toFixed(2) + " " + this.mapYZero.toFixed(2), 10, 500);
+        ctx.save();
+        ctx.scale(1, tileYRatio);
+        ctx.translate(0, this.tileMapDepth);
+        ctx.strokeStyle = "black";
+        ctx.fillStyle = "black";
+        for (var i = 10; i < this.detectionRadius; i *= Math.log(i * 7)) {
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, i, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, this.detectionRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.beginPath();
+        ctx.moveTo(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2);
+        ctx.rect(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2,
+                 this.imgCache.width, this.imgCache.height);
+        ctx.stroke();
+    }
 }
+
+TileMap.prototype.addItem = function (item, x, y) {
+    this.items.push(item);
+    item.x = this.x + this.mapXZero + this.tileMapWidth / 2 * (x + y);
+    item.y = this.y + this.mapYZero + this.tileMapWidth / 2 * (y - x);
+}
+
+TileMap.prototype.addToGame = function () {
+    this.game.addBackground(this);
+    for (var i = 0; i < this.items.length; i++) {
+        var item = this.items[i];
+        if (!item.collected) {
+            item.dispose = false;
+            this.game.addEntity(item);
+        }
+    }
+    this.dispose = false;
+}
+
+TileMap.prototype.removeFromGame = function () {
+    for (var i = 0; i < this.items.length; i++) {
+        this.items[i].dispose = true;
+    }
+    this.dispose = true;
+}
+
+//sqrt(dx^2 + dy^2) <= (island radius + player radius) + canvas diagonal distance
+//dx^2 + dy^2 <= r^2 + 2r * sqrt(d) + d
+TileMap.prototype.isNearPlayer = function (player) {
+    var radiusDistance = this.detectionRadius + 10; //TODO add player collision radius
+    var totalDistance = Math.pow(radiusDistance, 2) + 2 * radiusDistance * this.game.ctx.canvas.diagonal + Math.pow(this.game.ctx.canvas.diagonal, 2);
+    var difference = Math.pow(player.x - this.x, 2) + Math.pow(player.y - this.y, 2);
+    return difference <= totalDistance;
+}
+
+
+
+function TestMap(game, asset, x, y) {
+    TileMap.call(this, game, asset, x, y);
+}
+TestMap.prototype = new TileMap();
+TestMap.prototype.constructor = TestMap;
+
+TestMap.prototype.init = function () {
+    this.generateMap();
+    this.drawMap();
+    this.game.addBackground(this);
+}
+
+TestMap.prototype.generateMap = function () {
+    this.mapData = gameMap;
+}
+
+
+function Item(game, asset, drawOffsetX, drawOffsetY) {
+    Entity.call(this, game, asset, 0, 0);
+    this.drawOffsetX = drawOffsetX;
+    this.drawOffsetY = drawOffsetY;
+    this.collected = false;
+}
+Item.prototype = new Entity();
+Item.prototype.constructor = Item;
+
+Item.prototype.draw = function (ctx) {
+    Entity.prototype.draw.call(this, ctx);
+    if (debugMode) {
+        ctx.fillStyle = "black";
+        ctx.fillText(this.x.toFixed(2) + " " + this.y.toFixed(2), 10, 130);
+
+        ctx.save();
+        ctx.scale(1, tileYRatio);
+        var centerX = this.x - this.game.camera.x;
+        var centerY = this.y - this.game.camera.y;
+        ctx.strokeStyle = "black";
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 19, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+Item.prototype.update = function () {
+    if (Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
+        this.collected = true;
+        this.dispose = true;
+        console.log("You have obtained an item!");
+    }
+}
+
+
 
 var gameMap = [
     [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
@@ -904,11 +1161,14 @@ var gameMap = [
 
 
 
+
+
 var ASSET_MANAGER = new AssetManager();
 var debugMode = true;
 var tileMapWidth = 38;
 var tileMapHeight = 20;
 var tileMapDepth = 7;
+var tileYRatio = tileMapHeight / tileMapWidth;
 
 ASSET_MANAGER.queueDownload("images/test.png");
 ASSET_MANAGER.queueDownload("images/test_shadow.png");
@@ -916,18 +1176,30 @@ ASSET_MANAGER.queueDownload("images/map.gif");
 ASSET_MANAGER.queueDownload("images/map_tiles.png");
 ASSET_MANAGER.queueDownload("images/sky_bg.png");
 ASSET_MANAGER.queueDownload("images/enemy.png");
+ASSET_MANAGER.queueDownload("images/diamond.png");
 ASSET_MANAGER.downloadAll(function () {
     //console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/test.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50, 50);
     var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 300, 300, 30);
-    engine.addEntity(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
-    engine.addEntity(new TileMap(engine, player, 0, 0));
+    engine.player = player;
+    engine.addBackground(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
     engine.addEntity(player);
     engine.addEntity(enemy);
     engine.player = player;
     engine.camera = new Camera(engine, player);
     engine.addEntity(engine.camera);
+    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
+    testMap.init();
+    var miniMap = new Map(engine, player);
+    miniMap.initMap();
+    miniMap.addIsland(testMap);
+    miniMap.generateMap();
+    engine.addEntity(miniMap);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 1, 0);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 0, 0);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 0, 1);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 0, 2);
     engine.start();
 });
