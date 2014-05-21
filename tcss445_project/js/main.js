@@ -559,7 +559,7 @@ function Enemy(game, sprite, shadowSprite, x, y, z) {
 Enemy.prototype = new Entity();
 Enemy.prototype.constructor = Enemy;
 Enemy.prototype.draw = function (ctx) {
-        var groundX = this.x - this.game.camera.x;
+    var groundX = this.x - this.game.camera.x;
     var groundY = this.y - this.game.camera.y;
     var spriteX = this.x - this.game.camera.x;
     var spriteY = this.y - this.game.camera.y + this.h * this.heightOffset;
@@ -619,11 +619,29 @@ Enemy.prototype.draw = function (ctx) {
         ctx.fillText("▲", spriteX - 5, spriteY - 5);
     }
     ctx.font="10px sans-serif";
+
+
+    if (debugMode) {
+        ctx.fillText("X: " + this.x.toFixed(2), 200, 15);
+        ctx.fillText("Y: " + this.y.toFixed(2), 200, 30);
+        ctx.fillText("H: " + this.h.toFixed(2), 200, 45);
+        ctx.fillText("A: " + (this.a * 180 / Math.PI).toFixed(2) + "\u00B0", 200, 60);
+        ctx.fillText("S: " + this.speed.toFixed(2), 200, 75);
+        ctx.fillText("Misc: " + this.x.toFixed(2) + " " + this.game.camera.actualX.toFixed(2) + " " + this.game.camera.x.toFixed(2), 200, 90);
+    }
     ctx.fillStyle="#000000";
+
 
 }
 Enemy.prototype.move = Player.prototype.move;
 Enemy.prototype.update = function() {
+    var stop_range = 2000;
+    var dx = this.game.player.x - this.x;
+    var dy = this.game.player.y - this.y;
+    if (dx * dx + dy * dy >= stop_range * stop_range) {
+        return;
+    }
+
     var dx = 0;
     var dy = 0;
     var random_input = Math.floor(Math.random()*100);
