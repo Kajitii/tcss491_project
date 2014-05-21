@@ -753,11 +753,13 @@ function Bullet(game, x, y, h, a) {
 
 Bullet.prototype = new Entity();
 Bullet.prototype.draw = function(ctx) {
-    var spriteX = this.x - this.game.camera.x;
-    var spriteY = this.y - this.game.camera.y + this.h * this.heightOffset;
+    var groundX = this.x - this.game.camera.x;
+    var groundY = this.y - this.game.camera.y;
+    var spriteX = groundX;
+    var spriteY = groundY + this.h * this.heightOffset;
     ctx.font="20px sans-serif";
     ctx.fillStyle="#FFA500";
-    ctx.fillText("●", spriteX, spriteY);
+    ctx.fillText("●", spriteX, spriteY * tileYRatio);
     ctx.font="10px sans-serif";
     ctx.fillStyle="#000000";
 }
