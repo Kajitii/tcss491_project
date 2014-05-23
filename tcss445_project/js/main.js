@@ -434,6 +434,7 @@ Camera.prototype.update = function () {
 
 function Player(game, sprite, shadowSprite, x, y) {
     Entity.call(this, game, sprite, x, y, 0);
+
     this.shadowImg = shadowSprite;
     this.groundHeightOffset = 10;
     this.h = this.groundHeightOffset;
@@ -448,6 +449,8 @@ function Player(game, sprite, shadowSprite, x, y) {
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
     this.shadowOffsetY = 0.25;  //pixels per height
+
+    this.inventory = [];
 }
 Player.prototype = new Entity();
 Player.prototype.constructor = Player;
@@ -521,6 +524,11 @@ Player.prototype.draw = function (ctx) {
         ctx.fillText("H: " + this.h.toFixed(2), 10, 45);
         ctx.fillText("A: " + (this.a * 180 / Math.PI).toFixed(2) + "\u00B0", 10, 60);
         ctx.fillText("S: " + this.speed.toFixed(2), 10, 75);
+        var string = "Inventory: ";
+        for (name in this.inventory) {
+            string += name + "(" + this.inventory[name] + "), ";
+        }
+        ctx.fillText(string, 10, 90);
     }
 }
 
@@ -607,6 +615,48 @@ Player.prototype.fire = function () {
         this.game.addEntity(bullet);
         this.game.fire = false;
     }
+}
+
+Player.prototype.addItem = function (name, n) {
+    if (!n) {
+        n = 1;
+    }
+    if (n < 0) {
+        throw "Error: an attempt was made to add negative amounts of an item. (" + name + "," + n + ")";
+    }
+    if (!this.inventory[name]) {
+        console.log("lmao!");
+        this.inventory[name] = n;
+    } else {
+        console.log("rofl!");
+        this.inventory[name] += n;
+    }
+}
+
+Player.prototype.checkItem = function (name) {
+    if (!this.inventory[name]) {
+        return 0;
+    } else {
+        return this.inventory[name];
+    }
+}
+
+Player.prototype.removeItem = function (name, n) {
+    if (!n) {
+        n = 1;
+    }
+    if (n < 0) {
+        throw "Error: an attempt was made to remove negative amounts of an item. (" + name + "," + n + ")";
+    }
+    var removed = Math.min(n, this.inventory[name]);
+    if (!this.inventory[name]) {
+        console.warn("An attempt was made to remove items the player does not have.");
+        removed = 0;
+    } else if (this.inventory[name] < n) {
+        console.warn("An attempt was made to remove more of a type of item than the player possessed.");
+    }
+    this.inventory[name] -= removed;
+    return removed;
 }
 
 function Enemy(game, sprite, shadowSprite, x, y, z) {
@@ -951,7 +1001,7 @@ TileMap.prototype.constructor = TileMap;
 TileMap.prototype.init = function () {
     this.generateMap();
     this.drawMap();
-    this.addItem(new Item(this.game, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 2, 2);
+    this.addItem(new Item(this.game, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 2, 2);
 }
 
 //Randomly generate a new map.
@@ -1079,8 +1129,9 @@ TestMap.prototype.generateMap = function () {
 }
 
 
-function Item(game, asset, drawOffsetX, drawOffsetY) {
+function Item(game, asset, name, drawOffsetX, drawOffsetY) {
     Entity.call(this, game, asset, 0, 0);
+    this.name = name;
     this.drawOffsetX = drawOffsetX;
     this.drawOffsetY = drawOffsetY;
     this.collected = false;
@@ -1110,7 +1161,7 @@ Item.prototype.update = function () {
     if (Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
         this.collected = true;
         this.dispose = true;
-        console.log("You have obtained an item!");
+        this.game.player.addItem(this.name);
     }
 }
 
@@ -1199,9 +1250,9 @@ ASSET_MANAGER.downloadAll(function () {
     miniMap.addIsland(testMap);
     miniMap.generateMap();
     engine.addEntity(miniMap);
-    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 1, 0);
-    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 0, 0);
-    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 0, 1);
-    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), 0, 0), 0, 2);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 1);
+    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 2);
     engine.start();
 });
