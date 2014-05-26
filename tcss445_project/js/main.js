@@ -432,10 +432,23 @@ Camera.prototype.update = function () {
 
 
 
-function Player(game, sprite, shadowSprite, x, y) {
+function Player(game, sprite, x, y) {
     Entity.call(this, game, sprite, x, y, 0);
 
-    this.shadowImg = shadowSprite;
+    this.spriteSheetOffsetX = 1439;
+    this.spriteSheetOffsetY = 1171;
+    this.frameWidth = 72;
+    this.frameHeight = 65;
+    this.animationDelay = 0.375; //seconds
+    this.animationTimer = 0;
+    this.flapping = 0;
+    this.flapFrames = 3; //Number of frames in the flapping animation
+    this.flapOffset = 0; //Frame offset for the flap animation
+    this.walkFrames = 4; //Number of frames in the walking animation
+    this.walkOffset = 3; //Frame offset for the walk animation
+    this.idleFrames = 2; //Number of frames in the idle animation
+    this.idleOffset = 6; //Frame offset for the idle animation
+
     this.groundHeightOffset = 10;
     this.h = this.groundHeightOffset;
     this.speed = 200;
@@ -445,10 +458,12 @@ function Player(game, sprite, shadowSprite, x, y) {
     this.flySpeedHeight = 120;
     this.flyAcceleration = 5;
     this.angleSpeed = 3 * Math.PI / 180;
-    this.isFlying = false;
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
     this.shadowOffsetY = 0.25;  //pixels per height
+
+    this.isFlying = false;
+    this.isIdle = true;
 
     this.inventory = [];
 }
@@ -456,28 +471,28 @@ Player.prototype = new Entity();
 Player.prototype.constructor = Player;
 
 Player.prototype.draw = function (ctx) {
-    var imgWidthOffset = this.img.width / 2; //TODO change this to fit the actual sprite when implemented.
-    var imgHeightOffset = this.img.height / 2; //TODO
+    var imgWidthOffset = this.frameWidth / 2;
+    var imgHeightOffset = 47;
     var groundX = this.x - this.game.camera.x;
     var groundY = this.y - this.game.camera.y;
     var spriteX = groundX;
     var spriteY = groundY + this.h * this.heightOffset;
-    var shadowX = groundX + this.h * this.shadowOffsetX;
+    var shadowX = groundX + (this.h - this.heightOffset) * this.shadowOffsetX;
     var shadowY = groundY + this.h * this.shadowOffsetY;
 
     //Draw the player shadow
-    ctx.drawImage(this.shadowImg,
-                  0, 0,
-                  this.shadowImg.width, this.shadowImg.height,
-                  shadowX - this.shadowImg.width / 2, shadowY * tileYRatio - this.shadowImg.height / 2,
-                  this.shadowImg.width, this.shadowImg.height);
+    ctx.save();
+
+    ctx.scale(1, tileYRatio);
+
+    ctx.fillStyle = "black";
+    ctx.beginPath();
+    ctx.arc(shadowX, shadowY, 13, 0, Math.PI * 2);
+    ctx.fill();
 
     //Draw the ground indicator
     //Ground circle and direction
     var r = 10;
-    ctx.save();
-
-    ctx.scale(1, tileYRatio);
     ctx.beginPath();
     if (this.isFlying) {
         ctx.strokeStyle = "rgba(0,255,0,0.5)";
@@ -511,11 +526,23 @@ Player.prototype.draw = function (ctx) {
     ctx.restore();
 
     //Draw the player sprite
+    var sx = 0;
+    var sy = this.spriteSheetOffsetY + Math.round(this.a * 4 / Math.PI) % 8 * this.frameHeight;
+    if (this.isFlying) {
+        sx = this.flapOffset;
+    } else if (this.isIdle) {
+        sx = this.idleOffset;
+    } else {
+        sx = this.walkOffset;
+    }
+    sx += Math.floor(this.animationTimer / this.animationDelay);
+    sx *= this.frameWidth;
+    sx += this.spriteSheetOffsetX;
     ctx.drawImage(this.img,
-                  0, 0,
-                  this.img.width, this.img.height,
+                  sx, sy,
+                  this.frameWidth, this.frameHeight,
                   spriteX - imgWidthOffset, spriteY * tileYRatio - imgHeightOffset,
-                  this.img.width, this.img.height);
+                  this.frameWidth, this.frameHeight);
 
     if (debugMode) {
         ctx.fillStyle = "black";
@@ -529,6 +556,7 @@ Player.prototype.draw = function (ctx) {
             string += name + "(" + this.inventory[name] + "), ";
         }
         ctx.fillText(string, 10, 90);
+        ctx.fillText("Misc: " + Math.round(this.a * 4 / Math.PI) % 8, 10, 105);
     }
 }
 
@@ -550,6 +578,7 @@ Player.prototype.update = function () {
                 this.speed -= Math.min(this.flyAcceleration, this.speed - this.flySpeedMin);
                 if (this.speed <= this.groundSpeed) {
                     this.isFlying = false;
+                    this.animationTimer = 0;
                 }
             } else {
                 this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
@@ -586,15 +615,35 @@ Player.prototype.update = function () {
     else {
         var dist = this.speed * this.game.clockTick;
         if (dx !== 0 || dy !== 0) {
+            if (this.isIdle) {
+                this.isIdle = false;
+                this.animationTimer = 0;
+            }
             this.a = Math.atan2(dy, dx);
+            if (this.a < 0) this.a += Math.PI * 2;
             this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
+        } else {
+            if (!this.isIdle) {
+                this.isIdle = true;
+                this.animationTimer = 0;
+            }
         }
 
         //Take off
         if (this.game.keyboardState[87]) { //w
             this.speed = this.groundSpeed * 0.5;
             this.isFlying = true;
+            this.animationTimer = 0;
         }
+    }
+
+    this.animationTimer += this.game.clockTick;
+    if (this.isIdle && this.animationTimer >= this.idleFrames * this.animationDelay) {
+        this.animationTimer -= this.idleFrames * this.animationDelay;
+    } else if (this.isFlying && this.animationTimer >= this.flapFrames * this.animationDelay) {
+        this.animationTimer -= this.flapFrames * this.animationDelay;
+    } else if (this.animationTimer >= this.walkFrames * this.animationDelay) {
+        this.animationTimer -= this.walkFrames * this.animationDelay;
     }
 }
 
@@ -1230,11 +1279,13 @@ ASSET_MANAGER.queueDownload("images/map_tiles.png");
 ASSET_MANAGER.queueDownload("images/sky_bg.png");
 ASSET_MANAGER.queueDownload("images/enemy.png");
 ASSET_MANAGER.queueDownload("images/diamond.png");
+//Pokemon Mystery Dungeon sprite sheet
+ASSET_MANAGER.queueDownload("images/PMD_sprites.png");
 ASSET_MANAGER.downloadAll(function () {
     //console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
-    var player = new Player(engine, ASSET_MANAGER.getAsset("images/test.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50, 50);
+    var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 50, 50);
     var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 300, 300, 30);
     engine.player = player;
     engine.addBackground(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
