@@ -1344,7 +1344,7 @@ ASSET_MANAGER.queueDownload("images/map_tiles.png");
 ASSET_MANAGER.queueDownload("images/sky_bg.png");
 ASSET_MANAGER.queueDownload("images/enemy.png");
 ASSET_MANAGER.queueDownload("images/diamond.png");
-ASSET_MANAGER.queueDownload("images/sign.png");
+ASSET_MANAGER.queueDownload("images/oak_p.png");
 //Pokemon Mystery Dungeon sprite sheet
 ASSET_MANAGER.queueDownload("images/PMD_sprites.png");
 ASSET_MANAGER.downloadAll(function () {
@@ -1368,7 +1368,7 @@ ASSET_MANAGER.downloadAll(function () {
     miniMap.generateMap();
     engine.addEntity(miniMap);
     engine.quests.push(new Quest(engine, "Diamond hunter", "Collect 3 diamonds!", {"Diamond": 3}));
-    var npc1 = new NPC(engine, ASSET_MANAGER.getAsset("images/sign.png"), 100, 100, engine.quests[0]);
+    var npc1 = new NPC(engine, ASSET_MANAGER.getAsset("images/oak_p.png"), 95, 100, engine.quests[0]);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 1);
