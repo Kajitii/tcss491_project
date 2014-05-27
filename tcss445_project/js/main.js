@@ -1252,6 +1252,7 @@ function NPC(game, sprite, x, y, quest) {
     this.quest = quest;
     this.game.addEntity(this);
     this.visited = false;
+    this.showDialog = false;
 }
 
 NPC.prototype = new Entity();
@@ -1259,12 +1260,25 @@ NPC.prototype.constructor = NPC;
 NPC.prototype.draw = function(ctx) {
     if (!this.quest.fullfilled())
         Entity.prototype.draw.call(this, ctx);
+    if (this.showDialog && !this.quest.fullfilled()) {
+        console.log("Show dialog");
+        ctx.fillStyle="#FF0000";
+        ctx.font="40px sans-serif";
+        ctx.fillText(this.quest.dialogs, 100, 400);
+        ctx.font="10px sans-serif";
+        ctx.fillStyle="#000000";
+
+    }
+
 }
 NPC.prototype.update = function () {
-    if (!this.visited && Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
+    if (Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
         this.visited = true;
         this.game.player.quest = this.quest;
-    }    
+        this.showDialog = true;
+    } else {
+        this.showDialog = false;
+    }   
 }
 
 var gameMap = [
@@ -1353,7 +1367,7 @@ ASSET_MANAGER.downloadAll(function () {
     miniMap.addIsland(testMap);
     miniMap.generateMap();
     engine.addEntity(miniMap);
-    engine.quests.push(new Quest(engine, "Diamond hunter", "Find all the diamonds", {"Diamond": 3}));
+    engine.quests.push(new Quest(engine, "Diamond hunter", "Collect 3 diamonds!", {"Diamond": 3}));
     var npc1 = new NPC(engine, ASSET_MANAGER.getAsset("images/sign.png"), 100, 100, engine.quests[0]);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
