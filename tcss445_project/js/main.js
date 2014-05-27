@@ -109,6 +109,8 @@ function GameEngine() {
     this.mouseMove = null;
     this.keyboardState = [];
     this.fire = false;
+
+    this.quests = [];
 }
 
 GameEngine.prototype.startInput = function () {
@@ -466,7 +468,9 @@ function Player(game, sprite, x, y) {
     this.isIdle = true;
 
     this.inventory = [];
+    this.quest = null;
 }
+
 Player.prototype = new Entity();
 Player.prototype.constructor = Player;
 
@@ -557,6 +561,19 @@ Player.prototype.draw = function (ctx) {
         }
         ctx.fillText(string, 10, 90);
         ctx.fillText("Misc: " + Math.round(this.a * 4 / Math.PI) % 8, 10, 105);
+        ctx.fillText("Quest: ", 10, 185);
+        if (this.quest) {
+            ctx.fillText(this.quest.title, 10, 200);
+            ctx.fillText("Requirements: ", 10, 215);
+            var i = 230;
+            for (var item in this.quest.targets) {
+                ctx.fillText(item + ": " + this.quest.targets[item], 30, i);
+                i+=15;
+            }
+            ctx.fillText("Fullfilled: " + this.quest.fullfilled(), 10, i);
+        } else {
+            ctx.fillText("Null", 10, 200);
+        }
     }
 }
 
@@ -1214,6 +1231,41 @@ Item.prototype.update = function () {
     }
 }
 
+function Quest(game, title, dialogs, targets) {
+    this.game = game;
+    this.title = title;
+    this.dialogs = dialogs;
+    this.targets = targets;
+}
+
+Quest.prototype.fullfilled = function () {
+    for (var item in this.targets) {
+        if (!this.game.player.inventory.hasOwnProperty(item) 
+            || this.game.player.inventory[item] < this.targets[item])
+            return false; 
+    }
+    return true;
+}
+
+function NPC(game, sprite, x, y, quest) {
+    Entity.call(this, game, sprite, x, y, 0);
+    this.quest = quest;
+    this.game.addEntity(this);
+    this.visited = false;
+}
+
+NPC.prototype = new Entity();
+NPC.prototype.constructor = NPC;
+NPC.prototype.draw = function(ctx) {
+    if (!this.quest.fullfilled())
+        Entity.prototype.draw.call(this, ctx);
+}
+NPC.prototype.update = function () {
+    if (!this.visited && Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
+        this.visited = true;
+        this.game.player.quest = this.quest;
+    }    
+}
 
 var gameMap = [
     [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
@@ -1278,6 +1330,7 @@ ASSET_MANAGER.queueDownload("images/map_tiles.png");
 ASSET_MANAGER.queueDownload("images/sky_bg.png");
 ASSET_MANAGER.queueDownload("images/enemy.png");
 ASSET_MANAGER.queueDownload("images/diamond.png");
+ASSET_MANAGER.queueDownload("images/sign.png");
 //Pokemon Mystery Dungeon sprite sheet
 ASSET_MANAGER.queueDownload("images/PMD_sprites.png");
 ASSET_MANAGER.downloadAll(function () {
@@ -1300,6 +1353,8 @@ ASSET_MANAGER.downloadAll(function () {
     miniMap.addIsland(testMap);
     miniMap.generateMap();
     engine.addEntity(miniMap);
+    engine.quests.push(new Quest(engine, "Diamond hunter", "Find all the diamonds", {"Diamond": 3}));
+    var npc1 = new NPC(engine, ASSET_MANAGER.getAsset("images/sign.png"), 100, 100, engine.quests[0]);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 1);
