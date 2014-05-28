@@ -239,11 +239,39 @@ GameEngine.prototype.draw = function (callback) {
     for (var i = 0; i < this.background.length; i++) {
         this.background[i].draw(this.ctx);
     }
+    this.arrangeByDrawOrder();
     for (var i = 0; i < this.entities.length; i++) {
         this.entities[i].draw(this.ctx);
     }
     for (var i = 0; i < this.foreground.length; i++) {
         this.foreground[i].draw(this.ctx);
+    }
+}
+
+//Insertion sort the entities array.  Entities are expected to be in sorted order, hence insertion sort is the best sort.
+//Entities are sorted by h value (height) first, then by y value.
+GameEngine.prototype.arrangeByDrawOrder = function () {
+    for (var i = 1; i < this.entities.length; i++) {
+        var j = i;
+        var entity = this.entities[j - 1];
+        var value1 = 0;
+        if (entity.y) value1 += entity.y;
+        if (entity.h) value1 += entity.h * 10000 * 10; //entity.h + quadrant height * map quadrant height
+        entity = this.entities[j];
+        var value2 = 0;
+        if (entity.y) value2 += entity.y;
+        if (entity.h) value2 += entity.h * 10000 * 10; //entity.h + quadrant height * map quadrant height
+        while (value1 > value2) {
+            var temp = this.entities[j];
+            this.entities[j] = this.entities[j - 1];
+            this.entities[j - 1] = temp;
+            j--;
+            if (j < 1) break;
+            entity = this.entities[j - 1];
+            value1 = 0;
+            if (entity.hasOwnProperty('y')) value1 += entity.y;
+            if (entity.hasOwnProperty('h')) value1 += entity.h * 10000 * 10; //entity.h + quadrant height * map quadrant height
+        }
     }
 }
 
@@ -449,8 +477,8 @@ function Player(game, sprite, x, y) {
     this.idleFrames = 2; //Number of frames in the idle animation
     this.idleOffset = 6; //Frame offset for the idle animation
 
-    this.groundHeightOffset = 10;
-    this.h = this.groundHeightOffset;
+    //this.groundHeightOffset = 10;
+    this.h = 0;
     this.speed = 200;
     this.groundSpeed = 200;
     this.flySpeed = 500;
@@ -573,7 +601,7 @@ Player.prototype.update = function () {
         var dh = 0;
         //Descend or land
         if (this.game.keyboardState[83]) {//s
-            dh = -Math.min(this.flySpeedHeight * this.game.clockTick * 2, this.h - this.groundHeightOffset);
+            dh = -Math.min(this.flySpeedHeight * this.game.clockTick * 2, this.h);
             if (dh === 0) {
                 this.speed -= Math.min(this.flyAcceleration, this.speed - this.flySpeedMin);
                 if (this.speed <= this.groundSpeed) {
@@ -1282,7 +1310,6 @@ ASSET_MANAGER.queueDownload("images/diamond.png");
 //Pokemon Mystery Dungeon sprite sheet
 ASSET_MANAGER.queueDownload("images/PMD_sprites.png");
 ASSET_MANAGER.downloadAll(function () {
-    //console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 50, 50);
