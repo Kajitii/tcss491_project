@@ -38,6 +38,7 @@ window.addEventListener("keydown", function (e) {
     switch (e.keyCode) {
         case 32: //Spacebar
         case 37: case 38: case 39: case 40: //left up right down
+        case 65: case 81: //a, q
         case 83: case 87: //s, w
             e.preventDefault();
         default:
@@ -246,6 +247,7 @@ GameEngine.prototype.draw = function (callback) {
     for (var i = 0; i < this.foreground.length; i++) {
         this.foreground[i].draw(this.ctx);
     }
+    this.camera.draw(this.ctx);
 }
 
 //Insertion sort the entities array.  Entities are expected to be in sorted order, hence insertion sort is the best sort.
@@ -279,6 +281,7 @@ GameEngine.prototype.update = function () {
     for (var i = 0; i < this.entities.length; i++) {
         this.entities[i].update();
     }
+    this.camera.update();
     for (var i = this.entities.length - 1; i >= 0; --i) {
         if (this.entities[i].dispose) {
             this.entities.splice(i, 1);
@@ -385,6 +388,66 @@ Entity.prototype.removeFromGame = function() {
 }
 
 
+function Animation(game, entity, image, initX, initY, frameWidth, frameHeight, offsetX, offsetY, frameDelays, repeat) {
+    this.game = game;
+    this.entity = entity;
+    this.img = image;
+    this.initialX = initX;
+    this.initialY = initY;
+    this.frameWidth = frameWidth;
+    this.frameHeight = frameHeight;
+    this.offsetX = offsetX;
+    this.offsetY = offsetY;
+    this.frameDelays = frameDelays;
+
+    this.animationTimer = 0;
+    this.animationSpeed = 1;
+    this.animationStep = 0;
+    this.repeat = repeat;
+    this.repeatCalled = false;
+}
+
+Animation.prototype.update = function () {
+    this.animationTimer += this.game.clockTick * this.animationSpeed;
+    if (this.animationTimer >= this.frameDelays[this.animationStep]) {
+        this.animationTimer -= this.frameDelays[this.animationStep++];
+        if (this.animationStep >= this.frameDelays.length) {
+            if (this.repeat) {
+                this.animationStep = 0;
+            } else if (this.repeatCalled) {
+                this.animationStep = 0;
+                this.repeatCalled = false;
+            } else {
+                this.animationStep--;
+            }
+        }
+    }
+}
+
+Animation.prototype.draw = function (ctx) {
+    var groundX = this.entity.x - this.game.camera.x;
+    var groundY = this.entity.y - this.game.camera.y;
+    var spriteX = groundX;
+    var spriteY = groundY + this.entity.h * this.entity.heightOffset;
+    var sx = this.initialX + this.animationStep * this.frameWidth;
+    var sy = this.initialY + Math.round(this.entity.a * 4 / Math.PI) % 8 * this.frameHeight;
+    ctx.drawImage(this.img,
+                  sx, sy,
+                  this.frameWidth, this.frameHeight,
+                  spriteX + this.offsetX, spriteY * tileYRatio + this.offsetY,
+                  this.frameWidth, this.frameHeight);
+}
+
+Animation.prototype.repeatAnimation = function () {
+    this.repeatCalled = true;
+}
+
+Animation.prototype.reset = function () {
+    this.animationTimer = 0;
+    this.animationStep = 0;
+}
+
+
 
 function Camera(game, player) {
     Entity.call(this, game, null);
@@ -467,15 +530,13 @@ function Player(game, sprite, x, y) {
     this.spriteSheetOffsetY = 1171;
     this.frameWidth = 72;
     this.frameHeight = 65;
-    this.animationDelay = 0.375; //seconds
-    this.animationTimer = 0;
+
+    this.frameDelays = [0.2, 0.2, 0.2, 0.25, 0.075, 0.075, 0.075, 0.075, 0.375, 0.375]; //seconds
     this.flapping = 0;
-    this.flapFrames = 3; //Number of frames in the flapping animation
-    this.flapOffset = 0; //Frame offset for the flap animation
-    this.walkFrames = 4; //Number of frames in the walking animation
-    this.walkOffset = 3; //Frame offset for the walk animation
-    this.idleFrames = 2; //Number of frames in the idle animation
-    this.idleOffset = 6; //Frame offset for the idle animation
+    this.flapAnimation = new Animation(game, this, sprite, 1439, 1171, 72, 65, -36, -47, [0.2, 0.2, 0.2, 0.25], false);
+    this.walkAnimation = new Animation(game, this, sprite, 1727, 1171, 72, 65, -36, -47, [0.1, 0.1, 0.1, 0.1], true);
+    this.idleAnimation = new Animation(game, this, sprite, 1943, 1171, 72, 65, -36, -47, [0.375, 0.375], true);
+    this.animation = this.idleAnimation;
 
     //this.groundHeightOffset = 10;
     this.h = 0;
@@ -484,7 +545,7 @@ function Player(game, sprite, x, y) {
     this.flySpeed = 500;
     this.flySpeedMin = this.groundSpeed / 2;
     this.flySpeedHeight = 120;
-    this.flyAcceleration = 5;
+    this.flyAcceleration = 3;
     this.angleSpeed = 3 * Math.PI / 180;
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
@@ -554,23 +615,7 @@ Player.prototype.draw = function (ctx) {
     ctx.restore();
 
     //Draw the player sprite
-    var sx = 0;
-    var sy = this.spriteSheetOffsetY + Math.round(this.a * 4 / Math.PI) % 8 * this.frameHeight;
-    if (this.isFlying) {
-        sx = this.flapOffset;
-    } else if (this.isIdle) {
-        sx = this.idleOffset;
-    } else {
-        sx = this.walkOffset;
-    }
-    sx += Math.floor(this.animationTimer / this.animationDelay);
-    sx *= this.frameWidth;
-    sx += this.spriteSheetOffsetX;
-    ctx.drawImage(this.img,
-                  sx, sy,
-                  this.frameWidth, this.frameHeight,
-                  spriteX - imgWidthOffset, spriteY * tileYRatio - imgHeightOffset,
-                  this.frameWidth, this.frameHeight);
+    this.animation.draw(ctx);
 
     if (debugMode) {
         ctx.fillStyle = "black";
@@ -584,7 +629,7 @@ Player.prototype.draw = function (ctx) {
             string += name + "(" + this.inventory[name] + "), ";
         }
         ctx.fillText(string, 10, 90);
-        ctx.fillText("Misc: " + Math.round(this.a * 4 / Math.PI) % 8, 10, 105);
+        ctx.fillText("Misc: " + this.wut, 10, 105);
     }
 }
 
@@ -598,29 +643,53 @@ Player.prototype.update = function () {
     if (this.game.keyboardState[32]) { this.fire(); }
 
     if (this.isFlying) {
-        var dh = 0;
+        if (!this.flapping) {
+            if (Math.random() > 0.994) {//~60% chance per second to not flap wings
+                this.animation.repeatAnimation();
+            }
+        }
+
+        var dh = 0; //difference in height
+        var ds = this.flyAcceleration; //difference in speed
+        var daa = 1; //turn rate factor //TODO
+        var das = 1; //animation speed factor
+        //Speed up
+        if (this.game.keyboardState[81]) {//q
+            this.animation.repeatAnimation();
+            ds = this.flyAcceleration * 2;
+            das *= 1.25;
+            daa *= 0.7;
+        }
+        //Slow down
+        if (this.game.keyboardState[65]) {//a
+            ds = this.flyAcceleration * 0.03;
+            das *= 0.9;
+            daa *= 1.3;
+        }
         //Descend or land
         if (this.game.keyboardState[83]) {//s
             dh = -Math.min(this.flySpeedHeight * this.game.clockTick * 2, this.h);
             if (dh === 0) {
-                this.speed -= Math.min(this.flyAcceleration, this.speed - this.flySpeedMin);
+                ds = -this.flyAcceleration * 0.8;
                 if (this.speed <= this.groundSpeed) {
                     this.isFlying = false;
-                    this.animationTimer = 0;
+                    this.animation = this.walkAnimation;
+                    this.animation.reset();
                 }
-            } else {
-                this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
             }
-        } else {
-            this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
         }
         //Ascend
         if (this.game.keyboardState[87]) {//w
+            das *= 1.4;
+            this.animation.repeatAnimation();
             dh = this.flySpeedHeight * this.game.clockTick;
         }
+        this.animation.animationSpeed = das;
         this.h += dh;
 
         //Calculate direction, velocity, and location
+        this.wut = ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration;
+        this.speed += ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration;
         var dist = this.speed * this.game.clockTick;
         var angle = 0;
         if (dx !== 0 || dy !== 0) {
@@ -628,7 +697,7 @@ Player.prototype.update = function () {
             if (angle < 0) angle += Math.PI * 2;
             var da = this.a - angle;
             if (da < 0) da += Math.PI * 2;
-            var actualDa = Math.min(this.angleSpeed, Math.abs(this.a - angle));
+            var actualDa = Math.min(this.angleSpeed * daa, Math.abs(this.a - angle));
             if (da < -Math.PI || (da >= 0 && da < Math.PI)) { //turn left
                 this.a -= actualDa;
                 if (this.a < 0) this.a += Math.PI * 2;
@@ -645,7 +714,8 @@ Player.prototype.update = function () {
         if (dx !== 0 || dy !== 0) {
             if (this.isIdle) {
                 this.isIdle = false;
-                this.animationTimer = 0;
+                this.animation = this.walkAnimation;
+                this.animation.reset();
             }
             this.a = Math.atan2(dy, dx);
             if (this.a < 0) this.a += Math.PI * 2;
@@ -653,7 +723,8 @@ Player.prototype.update = function () {
         } else {
             if (!this.isIdle) {
                 this.isIdle = true;
-                this.animationTimer = 0;
+                this.animation = this.idleAnimation;
+                this.animation.reset();
             }
         }
 
@@ -661,28 +732,18 @@ Player.prototype.update = function () {
         if (this.game.keyboardState[87]) { //w
             this.speed = this.groundSpeed * 0.5;
             this.isFlying = true;
-            this.animationTimer = 0;
+            this.isIdle = false;
+            this.animation = this.flapAnimation;
+            this.animation.reset();
         }
     }
 
-    this.animationTimer += this.game.clockTick;
-    if (this.isIdle && this.animationTimer >= this.idleFrames * this.animationDelay) {
-        this.animationTimer -= this.idleFrames * this.animationDelay;
-    } else if (this.isFlying && this.animationTimer >= this.flapFrames * this.animationDelay) {
-        this.animationTimer -= this.flapFrames * this.animationDelay;
-    } else if (this.animationTimer >= this.walkFrames * this.animationDelay) {
-        this.animationTimer -= this.walkFrames * this.animationDelay;
-    }
+    this.animation.update();
 }
 
 Player.prototype.move = function (dx, dy) {
     this.x += dx;
-    // this.playerSprite.x += dx;
-    // this.shadow.x += dx;
-
     this.y += dy;
-    // this.playerSprite.y += dy;
-    // this.shadow.y += dy;
 }
 
 Player.prototype.fire = function () {
@@ -1320,7 +1381,6 @@ ASSET_MANAGER.downloadAll(function () {
     engine.addEntity(enemy);
     engine.player = player;
     engine.camera = new Camera(engine, player);
-    engine.addEntity(engine.camera);
     var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
     testMap.init();
     var miniMap = new Map(engine, player);
