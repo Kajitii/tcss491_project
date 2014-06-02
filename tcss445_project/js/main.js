@@ -1262,11 +1262,13 @@ NPC.prototype.draw = function(ctx) {
         Entity.prototype.draw.call(this, ctx);
     if (this.showDialog && !this.quest.fullfilled()) {
         console.log("Show dialog");
+        var horizontalOffset = 500 - this.quest.dialogs.length * 11;
+
         ctx.fillStyle = "rgba(0, 0, 100, 0.75)";
-        ctx.fillRect(500 - this.quest.dialogs.length * 11, 500, this.quest.dialogs.length * 20, 100);
+        ctx.fillRect(horizontalOffset, 500, this.quest.dialogs.length * 20, 100);
         ctx.fillStyle = "#FFFFFF";
         ctx.font="30px sans-serif";
-        ctx.fillText(this.quest.dialogs, 500 - this.quest.dialogs.length * 11 + 50, 560);
+        ctx.fillText(this.quest.dialogs, horizontalOffset + 50, 560);
         ctx.font="10px sans-serif";
         ctx.fillStyle="#000000";
 
