@@ -1262,9 +1262,11 @@ NPC.prototype.draw = function(ctx) {
         Entity.prototype.draw.call(this, ctx);
     if (this.showDialog && !this.quest.fullfilled()) {
         console.log("Show dialog");
-        ctx.fillStyle="#FF0000";
-        ctx.font="40px sans-serif";
-        ctx.fillText(this.quest.dialogs, 100, 400);
+        ctx.fillStyle = "rgba(0, 0, 100, 0.75)";
+        ctx.fillRect(300, 500, this.quest.dialogs.length * 20, 100);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font="30px sans-serif";
+        ctx.fillText(this.quest.dialogs, 350, 560);
         ctx.font="10px sans-serif";
         ctx.fillStyle="#000000";
 
@@ -1280,6 +1282,7 @@ NPC.prototype.update = function () {
         this.showDialog = false;
     }   
 }
+
 
 var gameMap = [
     [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
