@@ -101,6 +101,7 @@ function GameEngine() {
     this.foreground = [];
 
     this.ctx = null;
+    this.map = null;
     this.camera = null;
     this.clockTick = null;
 
@@ -110,6 +111,8 @@ function GameEngine() {
     this.mouseMove = null;
     this.keyboardState = [];
     this.fire = false;
+
+    this.debugStack = [];
 }
 
 GameEngine.prototype.startInput = function () {
@@ -247,7 +250,16 @@ GameEngine.prototype.draw = function (callback) {
     for (var i = 0; i < this.foreground.length; i++) {
         this.foreground[i].draw(this.ctx);
     }
+    this.map.draw(this.ctx);
     this.camera.draw(this.ctx);
+    if (debugMode) {
+        var y = 20;
+        this.ctx.fillStyle = "black";
+        for (i in this.debugStack) {
+            this.ctx.fillText(this.debugStack[i], 500, y);
+            y += 15;
+        }
+    }
 }
 
 //Insertion sort the entities array.  Entities are expected to be in sorted order, hence insertion sort is the best sort.
@@ -278,6 +290,8 @@ GameEngine.prototype.arrangeByDrawOrder = function () {
 }
 
 GameEngine.prototype.update = function () {
+    this.debugStack = [];
+    this.map.update();
     for (var i = 0; i < this.entities.length; i++) {
         this.entities[i].update();
     }
@@ -316,6 +330,10 @@ GameEngine.prototype.addForeground = function (entity) {
     this.foreground.push(entity);
 }
 
+GameEngine.prototype.addDebugStatement = function (string) {
+    this.debugStack.push(string);
+}
+
 
 function Timer() {
     this.gameTime = 0;
@@ -342,6 +360,7 @@ function Entity(game, image, x, y, a) {
     this.x = x;
     this.y = y;
     this.a = a; //radians
+    this.r = 0;
     this.dispose = false; //set this to true to remove the entity from the game.
 }
 
@@ -525,6 +544,7 @@ Camera.prototype.update = function () {
 
 function Player(game, sprite, x, y) {
     Entity.call(this, game, sprite, x, y, 0);
+    this.r = 11;
 
     this.spriteSheetOffsetX = 1439;
     this.spriteSheetOffsetY = 1171;
@@ -581,16 +601,15 @@ Player.prototype.draw = function (ctx) {
 
     //Draw the ground indicator
     //Ground circle and direction
-    var r = 10;
     ctx.beginPath();
     if (this.isFlying) {
         ctx.strokeStyle = "rgba(0,255,0,0.5)";
     } else {
         ctx.strokeStyle = "rgba(255,0,0,0.5)";
     }
-    ctx.arc(groundX, groundY, r, 0, Math.PI * 2);
+    ctx.arc(groundX, groundY, this.r, 0, Math.PI * 2);
     ctx.moveTo(groundX, groundY);
-    ctx.lineTo(groundX + r * Math.cos(this.a), groundY + r * Math.sin(this.a));
+    ctx.lineTo(groundX + this.r * Math.cos(this.a), groundY + this.r * Math.sin(this.a));
     ctx.stroke();
 
     //Ground to player sprite
@@ -671,7 +690,7 @@ Player.prototype.update = function () {
             dh = -Math.min(this.flySpeedHeight * this.game.clockTick * 2, this.h);
             if (dh === 0) {
                 ds = -this.flyAcceleration * 0.8;
-                if (this.speed <= this.groundSpeed) {
+                if (this.speed <= this.groundSpeed && this.game.map.isOverLand(this.x, this.y)) {
                     this.isFlying = false;
                     this.animation = this.walkAnimation;
                     this.animation.reset();
@@ -689,7 +708,7 @@ Player.prototype.update = function () {
 
         //Calculate direction, velocity, and location
         this.wut = ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration;
-        this.speed += ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration;
+        this.speed = Math.max(this.speed + ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration, this.groundSpeed / 3);
         var dist = this.speed * this.game.clockTick;
         var angle = 0;
         if (dx !== 0 || dy !== 0) {
@@ -712,14 +731,24 @@ Player.prototype.update = function () {
     else {
         var dist = this.speed * this.game.clockTick;
         if (dx !== 0 || dy !== 0) {
-            if (this.isIdle) {
-                this.isIdle = false;
-                this.animation = this.walkAnimation;
-                this.animation.reset();
-            }
             this.a = Math.atan2(dy, dx);
             if (this.a < 0) this.a += Math.PI * 2;
-            this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
+            var actualDX = dist * Math.cos(this.a);
+            dx = Math.cos(this.a);
+            var actualDY = dist * Math.sin(this.a);
+            dy = Math.sin(this.a);
+            if (this.game.map.isOverLand(this.x + (dist + this.r) * dx, this.y + (dist + this.r) * dy)) {
+                if (this.isIdle) {
+                    this.isIdle = false;
+                    this.animation = this.walkAnimation;
+                    this.animation.reset();
+                }
+                this.move(actualDX, actualDY);
+            } else if (!this.isIdle) {
+                this.isIdle = true;
+                this.animation = this.idleAnimation;
+                this.animation.reset();
+            }
         } else {
             if (!this.isIdle) {
                 this.isIdle = true;
@@ -763,10 +792,8 @@ Player.prototype.addItem = function (name, n) {
         throw "Error: an attempt was made to add negative amounts of an item. (" + name + "," + n + ")";
     }
     if (!this.inventory[name]) {
-        console.log("lmao!");
         this.inventory[name] = n;
     } else {
-        console.log("rofl!");
         this.inventory[name] += n;
     }
 }
@@ -978,6 +1005,7 @@ function Map(game, player) {
     this.mapHeight = this.mapQuadrantHeight * this.quadrantHeight;
     this.currentQuadrantX = 0;
     this.currentQuadrantY = 0;
+    this.currentIslands = [];
     this.quadrants = [];
     this.whatever = false;
 }
@@ -1007,7 +1035,7 @@ Map.prototype.initMap = function () {
 }
 
 Map.prototype.addIsland = function (island) {
-    this.quadrants[island.y][island.x].islands.push(island);
+    this.quadrants[Math.floor(island.y / this.quadrantHeight)][Math.floor(island.x / this.quadrantWidth)].islands.push(island);
 }
 
 Map.prototype.generateMap = function () {
@@ -1044,7 +1072,6 @@ Map.prototype.draw = function (ctx) {
     }
 }
 
-var barbar = true;
 Map.prototype.update = function () {
     //if (this.player.x < 0) {
     //    this.player.x += this.mapWidth;
@@ -1057,6 +1084,7 @@ Map.prototype.update = function () {
     //    this.player.y -= this.mapHeight;
     //}
     this.whatever = [1];
+    this.currentIslands = [];
     this.currentQuadrantX = Math.floor(this.player.x / this.quadrantWidth);
     this.currentQuadrantY = Math.floor(this.player.y / this.quadrantHeight);
     var i = this.currentQuadrantX - 1;
@@ -1072,6 +1100,7 @@ Map.prototype.update = function () {
                 var island = q.islands[k];
                 if (island.isNearPlayer(this.player)) {
                     this.whatever.push(island);
+                    this.currentIslands.push(island);
                     if (island.dispose) {
                         island.addToGame();
                     }
@@ -1082,6 +1111,15 @@ Map.prototype.update = function () {
         }
     }
     barbar = false;
+}
+
+Map.prototype.isOverLand = function (x, y) {
+    for (var i = 0; i < this.currentIslands.length; i++) {
+        if (this.currentIslands[i].isOverLand(x, y)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 
@@ -1124,6 +1162,9 @@ function TileMap(game, asset, x, y) {
     this.tileMapDepth = 7;     //How deep an individual tile is on the game canvas
 
     this.items = [];
+
+    this.debugTileX = null;
+    this.debugTileY = null;
 
     this.dispose = true;
 }
@@ -1180,7 +1221,7 @@ TileMap.prototype.drawMap = function () {
 
     this.detectionRadius = Math.max(this.imgCache.width, this.imgCache.height) / 2 * Math.SQRT2;
     this.mapXZero = (this.tileMapWidth - this.imgCache.width) / 2;
-    this.mapYZero = (-(this.mapData.length + this.mapData[0].length) / 2 * this.tileMapWidth + this.tileMapWidth * this.mapData[0].length) / 2;
+    this.mapYZero = (-(this.mapData.length + this.mapData[0].length) / 2 + this.mapData[0].length) / 2 * this.tileMapWidth;
 }
 
 TileMap.prototype.draw = function (ctx) {
@@ -1193,7 +1234,6 @@ TileMap.prototype.draw = function (ctx) {
         ctx.fillText(this.mapXZero.toFixed(2) + " " + this.mapYZero.toFixed(2), 10, 500);
         ctx.save();
         ctx.scale(1, tileYRatio);
-        ctx.translate(0, this.tileMapDepth);
         ctx.strokeStyle = "black";
         ctx.fillStyle = "black";
         for (var i = 10; i < this.detectionRadius; i *= Math.log(i * 7)) {
@@ -1207,10 +1247,21 @@ TileMap.prototype.draw = function (ctx) {
         ctx.restore();
 
         ctx.beginPath();
-        ctx.moveTo(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2);
-        ctx.rect(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2,
-                 this.imgCache.width, this.imgCache.height);
+        ctx.rect(centerX - this.imgCache.width / 2, centerY * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2,
+                 this.imgCache.width, this.imgCache.height - this.tileMapDepth);
         ctx.stroke();
+
+        if (this.debugTileX) {
+            ctx.beginPath();
+            ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
+            ctx.moveTo(this.debugTileX, this.debugTileY);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2, this.debugTileY - this.tileMapHeight / 2);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth, this.debugTileY);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2, this.debugTileY + this.tileMapHeight / 2);
+            ctx.fill();
+        }
+
+        ctx.fillText("(" + this.debugTileX + "," + this.debugTileY + ")", 150, 50);
     }
 }
 
@@ -1246,6 +1297,34 @@ TileMap.prototype.isNearPlayer = function (player) {
     var totalDistance = Math.pow(radiusDistance, 2) + 2 * radiusDistance * this.game.ctx.canvas.diagonal + Math.pow(this.game.ctx.canvas.diagonal, 2);
     var difference = Math.pow(player.x - this.x, 2) + Math.pow(player.y - this.y, 2);
     return difference <= totalDistance;
+}
+
+TileMap.prototype.isOverLand = function (x, y) {
+    var localX = x - (this.x + this.mapXZero - this.tileMapWidth / 2);
+    var localY = y - (this.y + this.mapYZero);
+    var tileX = localX - localY;
+    var tileY = localX + localY;
+    var mapX = Math.floor((localX - localY) / this.tileMapWidth);
+    var mapY = Math.floor((localX + localY) / this.tileMapWidth);
+    this.game.addDebugStatement("Player origin: (" + x.toFixed(2) + "," + y.toFixed(2) + ")");
+    this.game.addDebugStatement("Island origin: (" + this.x.toFixed(2) + "," + this.y.toFixed(2) + ")");
+    this.game.addDebugStatement("Island tile origin: (" + this.mapXZero.toFixed(2) + "," + this.mapYZero.toFixed(2) + ")");
+    this.game.addDebugStatement("Local coord: (" + localX.toFixed(2) + "," + localY.toFixed(2) + ")");
+    this.game.addDebugStatement("Tile coord: (" + tileX.toFixed(2) + "," + tileY.toFixed(2) + ")");
+    this.game.addDebugStatement("Map coord: (" + mapX.toFixed(2) + "," + mapY.toFixed(2) + ")");
+    if (((mapX >= 0 && mapX < this.mapData[0].length) && (mapY >= 0 && mapY < this.mapData.length))
+        && this.mapData[mapY][mapX]) {
+        this.debugTileX = this.x + this.mapXZero + (mapX + mapY - 1) * this.tileMapWidth / 2;
+        this.debugTileY = this.y + this.mapYZero + (mapY - mapX) * this.tileMapWidth / 2;
+        this.game.addDebugStatement("Debug coord: (" + this.debugTileX.toFixed(2) + "," + this.debugTileY.toFixed(2) + ")");
+        this.debugTileX = this.debugTileX - this.game.camera.x;
+        this.debugTileY = (this.debugTileY - this.game.camera.y) * tileYRatio;
+        return true;
+    } else {
+        this.debugTileX = -999;
+        this.debugTileY = -999;
+        return false;
+    }
 }
 
 
@@ -1355,7 +1434,7 @@ var gameMap = [
 
 
 var ASSET_MANAGER = new AssetManager();
-var debugMode = true;
+var debugMode = false;
 var tileMapWidth = 38;
 var tileMapHeight = 20;
 var tileMapDepth = 7;
@@ -1371,6 +1450,7 @@ ASSET_MANAGER.queueDownload("images/diamond.png");
 //Pokemon Mystery Dungeon sprite sheet
 ASSET_MANAGER.queueDownload("images/PMD_sprites.png");
 ASSET_MANAGER.downloadAll(function () {
+    console.log(typeof (null));
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 50, 50);
@@ -1378,16 +1458,16 @@ ASSET_MANAGER.downloadAll(function () {
     engine.player = player;
     engine.addBackground(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
     engine.addEntity(player);
-    engine.addEntity(enemy);
+    //engine.addEntity(enemy);
     engine.player = player;
     engine.camera = new Camera(engine, player);
-    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
+    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 741, 57);
     testMap.init();
     var miniMap = new Map(engine, player);
     miniMap.initMap();
     miniMap.addIsland(testMap);
     miniMap.generateMap();
-    engine.addEntity(miniMap);
+    engine.map = miniMap;
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 1);
