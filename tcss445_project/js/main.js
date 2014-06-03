@@ -1383,6 +1383,17 @@ Item.prototype.update = function () {
 }
 
 
+function Cloud(game, asset) {
+    Entity.call(this, game, asset, 0, 0);
+}
+Cloud.prototype = new Entity();
+Cloud.prototype.constructor = Cloud;
+
+Cloud.prototype.draw = function (ctx) {
+    ctx.drawImage(this.img, this.x, this.y);
+}
+
+
 
 var gameMap = [
     [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
@@ -1456,7 +1467,8 @@ ASSET_MANAGER.downloadAll(function () {
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 50, 50);
     var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 300, 300, 30);
     engine.player = player;
-    engine.addBackground(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
+    var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"));
+    engine.addBackground(bg);
     engine.addEntity(player);
     //engine.addEntity(enemy);
     engine.player = player;
