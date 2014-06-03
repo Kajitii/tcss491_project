@@ -1205,6 +1205,43 @@ function Item(game, asset, name, drawOffsetX, drawOffsetY) {
 Item.prototype = new Entity();
 Item.prototype.constructor = Item;
 
+function drawBox(ctx, x, y, width, height, radius, lineWidth) {
+
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = "white";
+
+    var left = x + 2 * lineWidth;
+    var top = y + 2 * lineWidth;
+    var right = x + width - 2 * lineWidth;
+    var bottom = y + height - 2 * lineWidth;
+
+    ctx.beginPath();
+    ctx.moveTo(left + radius, top);
+    ctx.lineTo(right - radius, top);
+    ctx.quadraticCurveTo(right, top, right, top + radius);
+    ctx.lineTo(right, bottom - radius);
+    ctx.quadraticCurveTo(right, bottom, right - radius, bottom);
+    ctx.lineTo(left + radius, bottom);
+    ctx.quadraticCurveTo(left, bottom, left, bottom - radius);
+    ctx.lineTo(left, top + radius);
+    ctx.quadraticCurveTo(left, top, left + radius, top);
+    ctx.closePath();
+
+    ctx.shadowOffsetX = lineWidth / 2;
+    ctx.shadowOffsetY = lineWidth / 2;
+    ctx.shadowBlur = lineWidth;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+    var grd = ctx.createLinearGradient(x, y, x, y + height);
+    grd.addColorStop(0, "#767E89");
+    grd.addColorStop(1, "#333333");
+    ctx.fillStyle = grd;
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+}
 Item.prototype.draw = function (ctx) {
     Entity.prototype.draw.call(this, ctx);
     if (debugMode) {
@@ -1263,9 +1300,9 @@ NPC.prototype.draw = function(ctx) {
     if (this.showDialog && !this.quest.fullfilled()) {
         console.log("Show dialog");
         var horizontalOffset = 500 - this.quest.dialogs.length * 11;
-
         ctx.fillStyle = "rgba(0, 0, 100, 0.75)";
-        ctx.fillRect(horizontalOffset, 500, this.quest.dialogs.length * 20, 100);
+        //ctx.fillRect(horizontalOffset, 500, this.quest.dialogs.length * 20, 100);
+        drawBox(ctx, horizontalOffset, 500, this.quest.dialogs.length * 20, 100, 20, 2);
         ctx.fillStyle = "#FFFFFF";
         ctx.font="30px sans-serif";
         ctx.fillText(this.quest.dialogs, horizontalOffset + 50, 560);
@@ -1284,7 +1321,6 @@ NPC.prototype.update = function () {
         this.showDialog = false;
     }   
 }
-
 
 var gameMap = [
     [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
