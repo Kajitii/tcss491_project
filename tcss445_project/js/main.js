@@ -1232,8 +1232,8 @@ function drawDialogBox(ctx, x, y, width, height, radius, lineWidth) {
     ctx.shadowBlur = lineWidth;
     ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
     var grd = ctx.createLinearGradient(x, y, x, y + height);
-    grd.addColorStop(0, "#767E89");
-    grd.addColorStop(1, "#333333");
+    grd.addColorStop(0, "rgba(196, 196, 196, 0.9)");
+    grd.addColorStop(1, "rgba(51, 51, 51, 0.5)");
     ctx.fillStyle = grd;
     ctx.fill();
     ctx.stroke();
