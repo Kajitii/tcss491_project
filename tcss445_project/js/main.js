@@ -1372,6 +1372,43 @@ function Item(game, asset, name, drawOffsetX, drawOffsetY) {
 Item.prototype = new Entity();
 Item.prototype.constructor = Item;
 
+function drawDialogBox(ctx, x, y, width, height, radius, lineWidth) {
+
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = "white";
+
+    var left = x + 2 * lineWidth;
+    var top = y + 2 * lineWidth;
+    var right = x + width - 2 * lineWidth;
+    var bottom = y + height - 2 * lineWidth;
+
+    ctx.beginPath();
+    ctx.moveTo(left + radius, top);
+    ctx.lineTo(right - radius, top);
+    ctx.quadraticCurveTo(right, top, right, top + radius);
+    ctx.lineTo(right, bottom - radius);
+    ctx.quadraticCurveTo(right, bottom, right - radius, bottom);
+    ctx.lineTo(left + radius, bottom);
+    ctx.quadraticCurveTo(left, bottom, left, bottom - radius);
+    ctx.lineTo(left, top + radius);
+    ctx.quadraticCurveTo(left, top, left + radius, top);
+    ctx.closePath();
+
+    ctx.shadowOffsetX = lineWidth / 2;
+    ctx.shadowOffsetY = lineWidth / 2;
+    ctx.shadowBlur = lineWidth;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+    var grd = ctx.createLinearGradient(x, y, x, y + height);
+    grd.addColorStop(0, "rgba(196, 196, 196, 0.9)");
+    grd.addColorStop(1, "rgba(51, 51, 51, 0.5)");
+    ctx.fillStyle = grd;
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+}
 Item.prototype.draw = function (ctx) {
     Entity.prototype.draw.call(this, ctx);
     if (debugMode) {
@@ -1419,6 +1456,7 @@ function NPC(game, sprite, x, y, quest) {
     this.quest = quest;
     this.game.addEntity(this);
     this.visited = false;
+    this.showDialog = false;
 }
 
 NPC.prototype = new Entity();
@@ -1426,12 +1464,28 @@ NPC.prototype.constructor = NPC;
 NPC.prototype.draw = function(ctx) {
     if (!this.quest.fullfilled())
         Entity.prototype.draw.call(this, ctx);
+    if (this.showDialog && !this.quest.fullfilled()) {
+        console.log("Show dialog");
+        var horizontalOffset = 500 - this.quest.dialogs.length * 11;
+        ctx.fillStyle = "rgba(0, 0, 100, 0.75)";
+        drawDialogBox(ctx, horizontalOffset, 500, this.quest.dialogs.length * 20, 100, 20, 2);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font="30px sans-serif";
+        ctx.fillText(this.quest.dialogs, horizontalOffset + 50, 560);
+        ctx.font="10px sans-serif";
+        ctx.fillStyle="#000000";
+
+    }
+
 }
 NPC.prototype.update = function () {
-    if (!this.visited && Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
+    if (Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
         this.visited = true;
         this.game.player.quest = this.quest;
-    }    
+        this.showDialog = true;
+    } else {
+        this.showDialog = false;
+    }   
 }
 function Cloud(game, asset) {
     Entity.call(this, game, asset, 0, 0);
@@ -1506,7 +1560,7 @@ ASSET_MANAGER.queueDownload("images/map_tiles.png");
 ASSET_MANAGER.queueDownload("images/sky_bg.png");
 ASSET_MANAGER.queueDownload("images/enemy.png");
 ASSET_MANAGER.queueDownload("images/diamond.png");
-ASSET_MANAGER.queueDownload("images/sign.png");
+ASSET_MANAGER.queueDownload("images/oak_p.png");
 //Pokemon Mystery Dungeon sprite sheet
 ASSET_MANAGER.queueDownload("images/PMD_sprites.png");
 ASSET_MANAGER.downloadAll(function () {
@@ -1529,9 +1583,9 @@ ASSET_MANAGER.downloadAll(function () {
     miniMap.addIsland(testMap);
     miniMap.generateMap();
     engine.addEntity(miniMap);
-    engine.quests.push(new Quest(engine, "Diamond hunter", "Find all the diamonds", {"Diamond": 3}));
-    var npc1 = new NPC(engine, ASSET_MANAGER.getAsset("images/sign.png"), 100, 100, engine.quests[0]);
     engine.map = miniMap;
+    engine.quests.push(new Quest(engine, "Diamond hunter", "Collect 3 diamonds!", {"Diamond": 3}));
+    var npc1 = new NPC(engine, ASSET_MANAGER.getAsset("images/oak_p.png"), 95, 100, engine.quests[0]);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 1);
