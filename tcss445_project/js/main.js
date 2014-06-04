@@ -1577,7 +1577,7 @@ ASSET_MANAGER.queueDownload("images/test.png");
 ASSET_MANAGER.queueDownload("images/test_shadow.png");
 ASSET_MANAGER.queueDownload("images/map.gif");
 ASSET_MANAGER.queueDownload("images/map_tiles.png");
-ASSET_MANAGER.queueDownload("images/sky_bg.png");
+ASSET_MANAGER.queueDownload("images/sky_bg.jpg");
 ASSET_MANAGER.queueDownload("images/enemy.png");
 ASSET_MANAGER.queueDownload("images/diamond.png");
 ASSET_MANAGER.queueDownload("images/oak_p.png");
@@ -1591,7 +1591,7 @@ ASSET_MANAGER.downloadAll(function () {
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 50, 50);
     var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 300, 300, 30);
     engine.player = player;
-    var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"));
+    var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.jpg"));
     engine.addBackground(bg);
     engine.addEntity(player);
     //engine.addEntity(enemy);
