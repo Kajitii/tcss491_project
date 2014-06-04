@@ -38,6 +38,7 @@ window.addEventListener("keydown", function (e) {
     switch (e.keyCode) {
         case 32: //Spacebar
         case 37: case 38: case 39: case 40: //left up right down
+        case 65: case 81: //a, q
         case 83: case 87: //s, w
             e.preventDefault();
         default:
@@ -100,6 +101,7 @@ function GameEngine() {
     this.foreground = [];
 
     this.ctx = null;
+    this.map = null;
     this.camera = null;
     this.clockTick = null;
 
@@ -111,6 +113,7 @@ function GameEngine() {
     this.fire = false;
 
     this.quests = [];
+    this.debugStack = [];
 }
 
 GameEngine.prototype.startInput = function () {
@@ -241,18 +244,59 @@ GameEngine.prototype.draw = function (callback) {
     for (var i = 0; i < this.background.length; i++) {
         this.background[i].draw(this.ctx);
     }
+    this.arrangeByDrawOrder();
     for (var i = 0; i < this.entities.length; i++) {
         this.entities[i].draw(this.ctx);
     }
     for (var i = 0; i < this.foreground.length; i++) {
         this.foreground[i].draw(this.ctx);
     }
+    this.map.draw(this.ctx);
+    this.camera.draw(this.ctx);
+    if (debugMode) {
+        var y = 20;
+        this.ctx.fillStyle = "black";
+        for (i in this.debugStack) {
+            this.ctx.fillText(this.debugStack[i], 500, y);
+            y += 15;
+        }
+    }
+}
+
+//Insertion sort the entities array.  Entities are expected to be in sorted order, hence insertion sort is the best sort.
+//Entities are sorted by h value (height) first, then by y value.
+GameEngine.prototype.arrangeByDrawOrder = function () {
+    for (var i = 1; i < this.entities.length; i++) {
+        var j = i;
+        var entity = this.entities[j - 1];
+        var value1 = 0;
+        if (entity.y) value1 += entity.y;
+        if (entity.h) value1 += entity.h * 10000 * 10; //entity.h + quadrant height * map quadrant height
+        entity = this.entities[j];
+        var value2 = 0;
+        if (entity.y) value2 += entity.y;
+        if (entity.h) value2 += entity.h * 10000 * 10; //entity.h + quadrant height * map quadrant height
+        while (value1 > value2) {
+            var temp = this.entities[j];
+            this.entities[j] = this.entities[j - 1];
+            this.entities[j - 1] = temp;
+            j--;
+            if (j < 1) break;
+            entity = this.entities[j - 1];
+            value1 = 0;
+            if (entity.hasOwnProperty('y')) value1 += entity.y;
+            if (entity.hasOwnProperty('h')) value1 += entity.h * 10000 * 10; //entity.h + quadrant height * map quadrant height
+        }
+    }
 }
 
 GameEngine.prototype.update = function () {
+    this.debugStack = [];
+    this.map.update();
     for (var i = 0; i < this.entities.length; i++) {
         this.entities[i].update();
     }
+    this.camera.update();
     for (var i = this.entities.length - 1; i >= 0; --i) {
         if (this.entities[i].dispose) {
             this.entities.splice(i, 1);
@@ -287,6 +331,10 @@ GameEngine.prototype.addForeground = function (entity) {
     this.foreground.push(entity);
 }
 
+GameEngine.prototype.addDebugStatement = function (string) {
+    this.debugStack.push(string);
+}
+
 
 function Timer() {
     this.gameTime = 0;
@@ -313,6 +361,7 @@ function Entity(game, image, x, y, a) {
     this.x = x;
     this.y = y;
     this.a = a; //radians
+    this.r = 0;
     this.dispose = false; //set this to true to remove the entity from the game.
 }
 
@@ -356,6 +405,66 @@ Entity.prototype.wrapAroundScreen = function () {
 
 Entity.prototype.removeFromGame = function() {
     this.dispose = true;
+}
+
+
+function Animation(game, entity, image, initX, initY, frameWidth, frameHeight, offsetX, offsetY, frameDelays, repeat) {
+    this.game = game;
+    this.entity = entity;
+    this.img = image;
+    this.initialX = initX;
+    this.initialY = initY;
+    this.frameWidth = frameWidth;
+    this.frameHeight = frameHeight;
+    this.offsetX = offsetX;
+    this.offsetY = offsetY;
+    this.frameDelays = frameDelays;
+
+    this.animationTimer = 0;
+    this.animationSpeed = 1;
+    this.animationStep = 0;
+    this.repeat = repeat;
+    this.repeatCalled = false;
+}
+
+Animation.prototype.update = function () {
+    this.animationTimer += this.game.clockTick * this.animationSpeed;
+    if (this.animationTimer >= this.frameDelays[this.animationStep]) {
+        this.animationTimer -= this.frameDelays[this.animationStep++];
+        if (this.animationStep >= this.frameDelays.length) {
+            if (this.repeat) {
+                this.animationStep = 0;
+            } else if (this.repeatCalled) {
+                this.animationStep = 0;
+                this.repeatCalled = false;
+            } else {
+                this.animationStep--;
+            }
+        }
+    }
+}
+
+Animation.prototype.draw = function (ctx) {
+    var groundX = this.entity.x - this.game.camera.x;
+    var groundY = this.entity.y - this.game.camera.y;
+    var spriteX = groundX;
+    var spriteY = groundY + this.entity.h * this.entity.heightOffset;
+    var sx = this.initialX + this.animationStep * this.frameWidth;
+    var sy = this.initialY + Math.round(this.entity.a * 4 / Math.PI) % 8 * this.frameHeight;
+    ctx.drawImage(this.img,
+                  sx, sy,
+                  this.frameWidth, this.frameHeight,
+                  spriteX + this.offsetX, spriteY * tileYRatio + this.offsetY,
+                  this.frameWidth, this.frameHeight);
+}
+
+Animation.prototype.repeatAnimation = function () {
+    this.repeatCalled = true;
+}
+
+Animation.prototype.reset = function () {
+    this.animationTimer = 0;
+    this.animationStep = 0;
 }
 
 
@@ -436,29 +545,28 @@ Camera.prototype.update = function () {
 
 function Player(game, sprite, x, y) {
     Entity.call(this, game, sprite, x, y, 0);
+    this.r = 11;
 
     this.spriteSheetOffsetX = 1439;
     this.spriteSheetOffsetY = 1171;
     this.frameWidth = 72;
     this.frameHeight = 65;
-    this.animationDelay = 0.375; //seconds
-    this.animationTimer = 0;
-    this.flapping = 0;
-    this.flapFrames = 3; //Number of frames in the flapping animation
-    this.flapOffset = 0; //Frame offset for the flap animation
-    this.walkFrames = 4; //Number of frames in the walking animation
-    this.walkOffset = 3; //Frame offset for the walk animation
-    this.idleFrames = 2; //Number of frames in the idle animation
-    this.idleOffset = 6; //Frame offset for the idle animation
 
-    this.groundHeightOffset = 10;
-    this.h = this.groundHeightOffset;
+    this.frameDelays = [0.2, 0.2, 0.2, 0.25, 0.075, 0.075, 0.075, 0.075, 0.375, 0.375]; //seconds
+    this.flapping = 0;
+    this.flapAnimation = new Animation(game, this, sprite, 1439, 1171, 72, 65, -36, -47, [0.2, 0.2, 0.2, 0.25], false);
+    this.walkAnimation = new Animation(game, this, sprite, 1727, 1171, 72, 65, -36, -47, [0.1, 0.1, 0.1, 0.1], true);
+    this.idleAnimation = new Animation(game, this, sprite, 1943, 1171, 72, 65, -36, -47, [0.375, 0.375], true);
+    this.animation = this.idleAnimation;
+
+    //this.groundHeightOffset = 10;
+    this.h = 0;
     this.speed = 200;
     this.groundSpeed = 200;
     this.flySpeed = 500;
     this.flySpeedMin = this.groundSpeed / 2;
     this.flySpeedHeight = 120;
-    this.flyAcceleration = 5;
+    this.flyAcceleration = 3;
     this.angleSpeed = 3 * Math.PI / 180;
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
@@ -496,16 +604,15 @@ Player.prototype.draw = function (ctx) {
 
     //Draw the ground indicator
     //Ground circle and direction
-    var r = 10;
     ctx.beginPath();
     if (this.isFlying) {
         ctx.strokeStyle = "rgba(0,255,0,0.5)";
     } else {
         ctx.strokeStyle = "rgba(255,0,0,0.5)";
     }
-    ctx.arc(groundX, groundY, r, 0, Math.PI * 2);
+    ctx.arc(groundX, groundY, this.r, 0, Math.PI * 2);
     ctx.moveTo(groundX, groundY);
-    ctx.lineTo(groundX + r * Math.cos(this.a), groundY + r * Math.sin(this.a));
+    ctx.lineTo(groundX + this.r * Math.cos(this.a), groundY + this.r * Math.sin(this.a));
     ctx.stroke();
 
     //Ground to player sprite
@@ -530,23 +637,7 @@ Player.prototype.draw = function (ctx) {
     ctx.restore();
 
     //Draw the player sprite
-    var sx = 0;
-    var sy = this.spriteSheetOffsetY + Math.round(this.a * 4 / Math.PI) % 8 * this.frameHeight;
-    if (this.isFlying) {
-        sx = this.flapOffset;
-    } else if (this.isIdle) {
-        sx = this.idleOffset;
-    } else {
-        sx = this.walkOffset;
-    }
-    sx += Math.floor(this.animationTimer / this.animationDelay);
-    sx *= this.frameWidth;
-    sx += this.spriteSheetOffsetX;
-    ctx.drawImage(this.img,
-                  sx, sy,
-                  this.frameWidth, this.frameHeight,
-                  spriteX - imgWidthOffset, spriteY * tileYRatio - imgHeightOffset,
-                  this.frameWidth, this.frameHeight);
+    this.animation.draw(ctx);
 
     if (debugMode) {
         ctx.fillStyle = "black";
@@ -587,29 +678,53 @@ Player.prototype.update = function () {
     if (this.game.keyboardState[32]) { this.fire(); }
 
     if (this.isFlying) {
-        var dh = 0;
+        if (!this.flapping) {
+            if (Math.random() > 0.994) {//~60% chance per second to not flap wings
+                this.animation.repeatAnimation();
+            }
+        }
+
+        var dh = 0; //difference in height
+        var ds = this.flyAcceleration; //difference in speed
+        var daa = 1; //turn rate factor //TODO
+        var das = 1; //animation speed factor
+        //Speed up
+        if (this.game.keyboardState[81]) {//q
+            this.animation.repeatAnimation();
+            ds = this.flyAcceleration * 2;
+            das *= 1.25;
+            daa *= 0.7;
+        }
+        //Slow down
+        if (this.game.keyboardState[65]) {//a
+            ds = this.flyAcceleration * 0.03;
+            das *= 0.9;
+            daa *= 1.3;
+        }
         //Descend or land
         if (this.game.keyboardState[83]) {//s
-            dh = -Math.min(this.flySpeedHeight * this.game.clockTick * 2, this.h - this.groundHeightOffset);
+            dh = -Math.min(this.flySpeedHeight * this.game.clockTick * 2, this.h);
             if (dh === 0) {
-                this.speed -= Math.min(this.flyAcceleration, this.speed - this.flySpeedMin);
-                if (this.speed <= this.groundSpeed) {
+                ds = -this.flyAcceleration * 0.8;
+                if (this.speed <= this.groundSpeed && this.game.map.isOverLand(this.x, this.y)) {
                     this.isFlying = false;
-                    this.animationTimer = 0;
+                    this.animation = this.walkAnimation;
+                    this.animation.reset();
                 }
-            } else {
-                this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
             }
-        } else {
-            this.speed += Math.min(this.flyAcceleration, this.flySpeed - this.speed);
         }
         //Ascend
         if (this.game.keyboardState[87]) {//w
+            das *= 1.4;
+            this.animation.repeatAnimation();
             dh = this.flySpeedHeight * this.game.clockTick;
         }
+        this.animation.animationSpeed = das;
         this.h += dh;
 
         //Calculate direction, velocity, and location
+        this.wut = ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration;
+        this.speed = Math.max(this.speed + ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration, this.groundSpeed / 3);
         var dist = this.speed * this.game.clockTick;
         var angle = 0;
         if (dx !== 0 || dy !== 0) {
@@ -617,7 +732,7 @@ Player.prototype.update = function () {
             if (angle < 0) angle += Math.PI * 2;
             var da = this.a - angle;
             if (da < 0) da += Math.PI * 2;
-            var actualDa = Math.min(this.angleSpeed, Math.abs(this.a - angle));
+            var actualDa = Math.min(this.angleSpeed * daa, Math.abs(this.a - angle));
             if (da < -Math.PI || (da >= 0 && da < Math.PI)) { //turn left
                 this.a -= actualDa;
                 if (this.a < 0) this.a += Math.PI * 2;
@@ -632,17 +747,29 @@ Player.prototype.update = function () {
     else {
         var dist = this.speed * this.game.clockTick;
         if (dx !== 0 || dy !== 0) {
-            if (this.isIdle) {
-                this.isIdle = false;
-                this.animationTimer = 0;
-            }
             this.a = Math.atan2(dy, dx);
             if (this.a < 0) this.a += Math.PI * 2;
-            this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
+            var actualDX = dist * Math.cos(this.a);
+            dx = Math.cos(this.a);
+            var actualDY = dist * Math.sin(this.a);
+            dy = Math.sin(this.a);
+            if (this.game.map.isOverLand(this.x + (dist + this.r) * dx, this.y + (dist + this.r) * dy)) {
+                if (this.isIdle) {
+                    this.isIdle = false;
+                    this.animation = this.walkAnimation;
+                    this.animation.reset();
+                }
+                this.move(actualDX, actualDY);
+            } else if (!this.isIdle) {
+                this.isIdle = true;
+                this.animation = this.idleAnimation;
+                this.animation.reset();
+            }
         } else {
             if (!this.isIdle) {
                 this.isIdle = true;
-                this.animationTimer = 0;
+                this.animation = this.idleAnimation;
+                this.animation.reset();
             }
         }
 
@@ -650,28 +777,18 @@ Player.prototype.update = function () {
         if (this.game.keyboardState[87]) { //w
             this.speed = this.groundSpeed * 0.5;
             this.isFlying = true;
-            this.animationTimer = 0;
+            this.isIdle = false;
+            this.animation = this.flapAnimation;
+            this.animation.reset();
         }
     }
 
-    this.animationTimer += this.game.clockTick;
-    if (this.isIdle && this.animationTimer >= this.idleFrames * this.animationDelay) {
-        this.animationTimer -= this.idleFrames * this.animationDelay;
-    } else if (this.isFlying && this.animationTimer >= this.flapFrames * this.animationDelay) {
-        this.animationTimer -= this.flapFrames * this.animationDelay;
-    } else if (this.animationTimer >= this.walkFrames * this.animationDelay) {
-        this.animationTimer -= this.walkFrames * this.animationDelay;
-    }
+    this.animation.update();
 }
 
 Player.prototype.move = function (dx, dy) {
     this.x += dx;
-    // this.playerSprite.x += dx;
-    // this.shadow.x += dx;
-
     this.y += dy;
-    // this.playerSprite.y += dy;
-    // this.shadow.y += dy;
 }
 
 Player.prototype.fire = function () {
@@ -691,10 +808,8 @@ Player.prototype.addItem = function (name, n) {
         throw "Error: an attempt was made to add negative amounts of an item. (" + name + "," + n + ")";
     }
     if (!this.inventory[name]) {
-        console.log("lmao!");
         this.inventory[name] = n;
     } else {
-        console.log("rofl!");
         this.inventory[name] += n;
     }
 }
@@ -906,6 +1021,7 @@ function Map(game, player) {
     this.mapHeight = this.mapQuadrantHeight * this.quadrantHeight;
     this.currentQuadrantX = 0;
     this.currentQuadrantY = 0;
+    this.currentIslands = [];
     this.quadrants = [];
     this.whatever = false;
 }
@@ -935,7 +1051,7 @@ Map.prototype.initMap = function () {
 }
 
 Map.prototype.addIsland = function (island) {
-    this.quadrants[island.y][island.x].islands.push(island);
+    this.quadrants[Math.floor(island.y / this.quadrantHeight)][Math.floor(island.x / this.quadrantWidth)].islands.push(island);
 }
 
 Map.prototype.generateMap = function () {
@@ -972,7 +1088,6 @@ Map.prototype.draw = function (ctx) {
     }
 }
 
-var barbar = true;
 Map.prototype.update = function () {
     //if (this.player.x < 0) {
     //    this.player.x += this.mapWidth;
@@ -985,6 +1100,7 @@ Map.prototype.update = function () {
     //    this.player.y -= this.mapHeight;
     //}
     this.whatever = [1];
+    this.currentIslands = [];
     this.currentQuadrantX = Math.floor(this.player.x / this.quadrantWidth);
     this.currentQuadrantY = Math.floor(this.player.y / this.quadrantHeight);
     var i = this.currentQuadrantX - 1;
@@ -1000,6 +1116,7 @@ Map.prototype.update = function () {
                 var island = q.islands[k];
                 if (island.isNearPlayer(this.player)) {
                     this.whatever.push(island);
+                    this.currentIslands.push(island);
                     if (island.dispose) {
                         island.addToGame();
                     }
@@ -1010,6 +1127,15 @@ Map.prototype.update = function () {
         }
     }
     barbar = false;
+}
+
+Map.prototype.isOverLand = function (x, y) {
+    for (var i = 0; i < this.currentIslands.length; i++) {
+        if (this.currentIslands[i].isOverLand(x, y)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 
@@ -1052,6 +1178,9 @@ function TileMap(game, asset, x, y) {
     this.tileMapDepth = 7;     //How deep an individual tile is on the game canvas
 
     this.items = [];
+
+    this.debugTileX = null;
+    this.debugTileY = null;
 
     this.dispose = true;
 }
@@ -1108,7 +1237,7 @@ TileMap.prototype.drawMap = function () {
 
     this.detectionRadius = Math.max(this.imgCache.width, this.imgCache.height) / 2 * Math.SQRT2;
     this.mapXZero = (this.tileMapWidth - this.imgCache.width) / 2;
-    this.mapYZero = (-(this.mapData.length + this.mapData[0].length) / 2 * this.tileMapWidth + this.tileMapWidth * this.mapData[0].length) / 2;
+    this.mapYZero = (-(this.mapData.length + this.mapData[0].length) / 2 + this.mapData[0].length) / 2 * this.tileMapWidth;
 }
 
 TileMap.prototype.draw = function (ctx) {
@@ -1121,7 +1250,6 @@ TileMap.prototype.draw = function (ctx) {
         ctx.fillText(this.mapXZero.toFixed(2) + " " + this.mapYZero.toFixed(2), 10, 500);
         ctx.save();
         ctx.scale(1, tileYRatio);
-        ctx.translate(0, this.tileMapDepth);
         ctx.strokeStyle = "black";
         ctx.fillStyle = "black";
         for (var i = 10; i < this.detectionRadius; i *= Math.log(i * 7)) {
@@ -1135,10 +1263,21 @@ TileMap.prototype.draw = function (ctx) {
         ctx.restore();
 
         ctx.beginPath();
-        ctx.moveTo(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2);
-        ctx.rect(this.x - this.game.camera.x - this.imgCache.width / 2, (this.y - this.game.camera.y) * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2,
-                 this.imgCache.width, this.imgCache.height);
+        ctx.rect(centerX - this.imgCache.width / 2, centerY * tileYRatio - (this.imgCache.height - this.tileMapDepth) / 2,
+                 this.imgCache.width, this.imgCache.height - this.tileMapDepth);
         ctx.stroke();
+
+        if (this.debugTileX) {
+            ctx.beginPath();
+            ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
+            ctx.moveTo(this.debugTileX, this.debugTileY);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2, this.debugTileY - this.tileMapHeight / 2);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth, this.debugTileY);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2, this.debugTileY + this.tileMapHeight / 2);
+            ctx.fill();
+        }
+
+        ctx.fillText("(" + this.debugTileX + "," + this.debugTileY + ")", 150, 50);
     }
 }
 
@@ -1174,6 +1313,34 @@ TileMap.prototype.isNearPlayer = function (player) {
     var totalDistance = Math.pow(radiusDistance, 2) + 2 * radiusDistance * this.game.ctx.canvas.diagonal + Math.pow(this.game.ctx.canvas.diagonal, 2);
     var difference = Math.pow(player.x - this.x, 2) + Math.pow(player.y - this.y, 2);
     return difference <= totalDistance;
+}
+
+TileMap.prototype.isOverLand = function (x, y) {
+    var localX = x - (this.x + this.mapXZero - this.tileMapWidth / 2);
+    var localY = y - (this.y + this.mapYZero);
+    var tileX = localX - localY;
+    var tileY = localX + localY;
+    var mapX = Math.floor((localX - localY) / this.tileMapWidth);
+    var mapY = Math.floor((localX + localY) / this.tileMapWidth);
+    this.game.addDebugStatement("Player origin: (" + x.toFixed(2) + "," + y.toFixed(2) + ")");
+    this.game.addDebugStatement("Island origin: (" + this.x.toFixed(2) + "," + this.y.toFixed(2) + ")");
+    this.game.addDebugStatement("Island tile origin: (" + this.mapXZero.toFixed(2) + "," + this.mapYZero.toFixed(2) + ")");
+    this.game.addDebugStatement("Local coord: (" + localX.toFixed(2) + "," + localY.toFixed(2) + ")");
+    this.game.addDebugStatement("Tile coord: (" + tileX.toFixed(2) + "," + tileY.toFixed(2) + ")");
+    this.game.addDebugStatement("Map coord: (" + mapX.toFixed(2) + "," + mapY.toFixed(2) + ")");
+    if (((mapX >= 0 && mapX < this.mapData[0].length) && (mapY >= 0 && mapY < this.mapData.length))
+        && this.mapData[mapY][mapX]) {
+        this.debugTileX = this.x + this.mapXZero + (mapX + mapY - 1) * this.tileMapWidth / 2;
+        this.debugTileY = this.y + this.mapYZero + (mapY - mapX) * this.tileMapWidth / 2;
+        this.game.addDebugStatement("Debug coord: (" + this.debugTileX.toFixed(2) + "," + this.debugTileY.toFixed(2) + ")");
+        this.debugTileX = this.debugTileX - this.game.camera.x;
+        this.debugTileY = (this.debugTileY - this.game.camera.y) * tileYRatio;
+        return true;
+    } else {
+        this.debugTileX = -999;
+        this.debugTileY = -999;
+        return false;
+    }
 }
 
 
@@ -1266,6 +1433,15 @@ NPC.prototype.update = function () {
         this.game.player.quest = this.quest;
     }    
 }
+function Cloud(game, asset) {
+    Entity.call(this, game, asset, 0, 0);
+}
+Cloud.prototype = new Entity();
+Cloud.prototype.constructor = Cloud;
+
+Cloud.prototype.draw = function (ctx) {
+    ctx.drawImage(this.img, this.x, this.y);
+}
 
 var gameMap = [
     [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x10000],   //iiiiiiuuulll
@@ -1317,7 +1493,7 @@ var gameMap = [
 
 
 var ASSET_MANAGER = new AssetManager();
-var debugMode = true;
+var debugMode = false;
 var tileMapWidth = 38;
 var tileMapHeight = 20;
 var tileMapDepth = 7;
@@ -1334,19 +1510,19 @@ ASSET_MANAGER.queueDownload("images/sign.png");
 //Pokemon Mystery Dungeon sprite sheet
 ASSET_MANAGER.queueDownload("images/PMD_sprites.png");
 ASSET_MANAGER.downloadAll(function () {
-    //console.log("Assets all loaded with " + ASSET_MANAGER.successCount + " successes and " + ASSET_MANAGER.errorCount + " errors.");
+    console.log(typeof (null));
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 50, 50);
     var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 300, 300, 30);
     engine.player = player;
-    engine.addBackground(new Entity(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"), 200, 200));
+    var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.png"));
+    engine.addBackground(bg);
     engine.addEntity(player);
-    engine.addEntity(enemy);
+    //engine.addEntity(enemy);
     engine.player = player;
     engine.camera = new Camera(engine, player);
-    engine.addEntity(engine.camera);
-    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
+    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 741, 57);
     testMap.init();
     var miniMap = new Map(engine, player);
     miniMap.initMap();
@@ -1355,6 +1531,7 @@ ASSET_MANAGER.downloadAll(function () {
     engine.addEntity(miniMap);
     engine.quests.push(new Quest(engine, "Diamond hunter", "Find all the diamonds", {"Diamond": 3}));
     var npc1 = new NPC(engine, ASSET_MANAGER.getAsset("images/sign.png"), 100, 100, engine.quests[0]);
+    engine.map = miniMap;
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 1);
