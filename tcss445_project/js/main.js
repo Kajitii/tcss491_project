@@ -670,20 +670,17 @@ Player.prototype.update = function () {
 
         var dh = 0; //difference in height
         var ds = this.flyAcceleration; //difference in speed
-        var daa = 1; //turn rate factor //TODO
         var das = 1; //animation speed factor
         //Speed up
         if (this.game.keyboardState[81]) {//q
             this.animation.repeatAnimation();
             ds = this.flyAcceleration * 2;
             das *= 1.25;
-            daa *= 0.7;
         }
         //Slow down
         if (this.game.keyboardState[65]) {//a
-            ds = this.flyAcceleration * 0.03;
+            ds = -this.flyAcceleration * 0.8;
             das *= 0.9;
-            daa *= 1.3;
         }
         //Descend or land
         if (this.game.keyboardState[83]) {//s
@@ -708,7 +705,7 @@ Player.prototype.update = function () {
 
         //Calculate direction, velocity, and location
         this.wut = ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration;
-        this.speed = Math.max(this.speed + ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration, this.groundSpeed / 3);
+        this.speed = Math.max(this.speed + ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration, this.groundSpeed / 2);
         var dist = this.speed * this.game.clockTick;
         var angle = 0;
         if (dx !== 0 || dy !== 0) {
@@ -716,7 +713,7 @@ Player.prototype.update = function () {
             if (angle < 0) angle += Math.PI * 2;
             var da = this.a - angle;
             if (da < 0) da += Math.PI * 2;
-            var actualDa = Math.min(this.angleSpeed * daa, Math.abs(this.a - angle));
+            var actualDa = Math.min((this.angleSpeed - (this.speed - this.flySpeed) * 0.0025 / 180 * Math.PI), Math.abs(this.a - angle));
             if (da < -Math.PI || (da >= 0 && da < Math.PI)) { //turn left
                 this.a -= actualDa;
                 if (this.a < 0) this.a += Math.PI * 2;
@@ -1254,10 +1251,10 @@ TileMap.prototype.draw = function (ctx) {
         if (this.debugTileX) {
             ctx.beginPath();
             ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
-            ctx.moveTo(this.debugTileX, this.debugTileY);
-            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2, this.debugTileY - this.tileMapHeight / 2);
-            ctx.lineTo(this.debugTileX + this.tileMapWidth, this.debugTileY);
-            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2, this.debugTileY + this.tileMapHeight / 2);
+            ctx.moveTo(this.debugTileX - this.game.camera.x, this.debugTileY - this.game.camera.y * tileYRatio);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2 - this.game.camera.x, this.debugTileY - this.game.camera.y * tileYRatio - this.tileMapHeight / 2);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth - this.game.camera.x, this.debugTileY - this.game.camera.y * tileYRatio);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2 - this.game.camera.x, this.debugTileY - this.game.camera.y * tileYRatio + this.tileMapHeight / 2);
             ctx.fill();
         }
 
@@ -1317,8 +1314,8 @@ TileMap.prototype.isOverLand = function (x, y) {
         this.debugTileX = this.x + this.mapXZero + (mapX + mapY - 1) * this.tileMapWidth / 2;
         this.debugTileY = this.y + this.mapYZero + (mapY - mapX) * this.tileMapWidth / 2;
         this.game.addDebugStatement("Debug coord: (" + this.debugTileX.toFixed(2) + "," + this.debugTileY.toFixed(2) + ")");
-        this.debugTileX = this.debugTileX - this.game.camera.x;
-        this.debugTileY = (this.debugTileY - this.game.camera.y) * tileYRatio;
+        this.debugTileX = this.debugTileX;
+        this.debugTileY = (this.debugTileY) * tileYRatio;
         return true;
     } else {
         this.debugTileX = -999;
@@ -1445,7 +1442,7 @@ var gameMap = [
 
 
 var ASSET_MANAGER = new AssetManager();
-var debugMode = false;
+var debugMode = true;
 var tileMapWidth = 38;
 var tileMapHeight = 20;
 var tileMapDepth = 7;
