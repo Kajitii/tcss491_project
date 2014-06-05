@@ -124,7 +124,7 @@ GameEngine.prototype.startInput = function () {
         var rect = that.ctx.canvas.getBoundingClientRect();
         var x = e.clientX - rect.left;
         var y = e.clientY - rect.top;
-        return {x:x, y:y};
+        return { x: x, y: y };
     }
 
     //https://developer.mozilla.org/en-US/docs/Web/Reference/Events/click
@@ -158,7 +158,7 @@ GameEngine.prototype.startInput = function () {
         that.keyboardState[e.keyCode] = false;
         that.keyboardUp = e;
     }, false);
-    
+
     var thatCanvas = this.ctx.canvas;
     var fsEvent = function (e) {
         console.log("fullscreen event fired!");
@@ -214,7 +214,7 @@ GameEngine.prototype.startInput = function () {
 }
 
 GameEngine.prototype.getXandY = function (e) {
-    return {x: e.clientX, y: e.clientY};
+    return { x: e.clientX, y: e.clientY };
 }
 
 GameEngine.prototype.init = function (ctx) {
@@ -226,7 +226,7 @@ GameEngine.prototype.init = function (ctx) {
 GameEngine.prototype.start = function () {
     console.log("start game");
     var that = this;
-    (function gameLoop () {
+    (function gameLoop() {
         that.loop();
         requestAnimFrame(gameLoop, that.ctx.canvas);
     })();
@@ -404,7 +404,7 @@ Entity.prototype.wrapAroundScreen = function () {
     else if (this.y + this.img.height < 0) { this.y += this.game.ctx.canvas.height + this.img.height; }
 }
 
-Entity.prototype.removeFromGame = function() {
+Entity.prototype.removeFromGame = function () {
     this.dispose = true;
 }
 
@@ -481,10 +481,10 @@ function Camera(game, player) {
     this.prevPlayerY = player.y;
     //the point at which the camera's center attempts to follow, relative to the player
     var distance = Math.max(player.speed * 0.25 - 100, 0);
-    this.centerX = this.game.ctx.canvas.width / 2 + distance * Math.cos(this.player.a);
-    this.centerY = this.game.ctx.canvas.height / 2 + distance * Math.sin(this.player.a);
+    this.centerX = this.x + this.game.ctx.canvas.width / 2 + distance * Math.cos(this.player.a);
+    this.centerY = this.y + this.game.ctx.canvas.height / 2 + distance * Math.sin(this.player.a);
     //the point at which the camera's center is at, relative to the player
-    this.actualX = this.centerX; 
+    this.actualX = this.centerX;
     this.actualY = this.centerY;
 
     this.speed = 0;
@@ -660,7 +660,7 @@ Player.prototype.draw = function (ctx) {
             var i = 230;
             for (var item in this.quest.targets) {
                 ctx.fillText(item + ": " + this.quest.targets[item], 30, i);
-                i+=15;
+                i += 15;
             }
             ctx.fillText("Fullfilled: " + this.quest.fullfilled(), 10, i);
         } else {
@@ -687,20 +687,17 @@ Player.prototype.update = function () {
 
         var dh = 0; //difference in height
         var ds = this.flyAcceleration; //difference in speed
-        var daa = 1; //turn rate factor //TODO
         var das = 1; //animation speed factor
         //Speed up
         if (this.game.keyboardState[81]) {//q
             this.animation.repeatAnimation();
             ds = this.flyAcceleration * 2;
             das *= 1.25;
-            daa *= 0.7;
         }
         //Slow down
         if (this.game.keyboardState[65]) {//a
-            ds = this.flyAcceleration * 0.03;
+            ds = -this.flyAcceleration * 0.8;
             das *= 0.9;
-            daa *= 1.3;
         }
         //Descend or land
         if (this.game.keyboardState[83]) {//s
@@ -725,7 +722,7 @@ Player.prototype.update = function () {
 
         //Calculate direction, velocity, and location
         this.wut = ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration;
-        this.speed = Math.max(this.speed + ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration, this.groundSpeed / 3);
+        this.speed = Math.max(this.speed + ds - Math.pow(this.speed, 2) / Math.pow(this.flySpeed, 2) * this.flyAcceleration, this.groundSpeed / 2);
         var dist = this.speed * this.game.clockTick;
         var angle = 0;
         if (dx !== 0 || dy !== 0) {
@@ -733,7 +730,7 @@ Player.prototype.update = function () {
             if (angle < 0) angle += Math.PI * 2;
             var da = this.a - angle;
             if (da < 0) da += Math.PI * 2;
-            var actualDa = Math.min(this.angleSpeed * daa, Math.abs(this.a - angle));
+            var actualDa = Math.min((this.angleSpeed - (this.speed - this.flySpeed) * 0.0025 / 180 * Math.PI), Math.abs(this.a - angle));
             if (da < -Math.PI || (da >= 0 && da < Math.PI)) { //turn left
                 this.a -= actualDa;
                 if (this.a < 0) this.a += Math.PI * 2;
@@ -746,7 +743,7 @@ Player.prototype.update = function () {
     }
 
     else {
-        var dist = this.speed * this.game.clockTick;
+        var dist = this.groundSpeed * this.game.clockTick;
         if (dx !== 0 || dy !== 0) {
             this.a = Math.atan2(dy, dx);
             if (this.a < 0) this.a += Math.PI * 2;
@@ -912,8 +909,8 @@ Enemy.prototype.draw = function (ctx) {
                   this.img.width, this.img.height,
                   spriteX, spriteY,
                   this.img.width, this.img.height);
-    ctx.fillStyle="#FF0000";
-    ctx.font="30px sans-serif";
+    ctx.fillStyle = "#FF0000";
+    ctx.font = "30px sans-serif";
     if (this.game.player.h === this.h) {
         ctx.fillText("●", spriteX - 5, spriteY - 5);
     } else if (this.game.player.h > this.h) {
@@ -921,7 +918,7 @@ Enemy.prototype.draw = function (ctx) {
     } else if (this.game.player.h < this.h) {
         ctx.fillText("▲", spriteX - 5, spriteY - 5);
     }
-    ctx.font="10px sans-serif";
+    ctx.font = "10px sans-serif";
 
 
     if (debugMode) {
@@ -932,12 +929,12 @@ Enemy.prototype.draw = function (ctx) {
         ctx.fillText("S: " + this.speed.toFixed(2), 200, 75);
         ctx.fillText("Misc: " + this.x.toFixed(2) + " " + this.game.camera.actualX.toFixed(2) + " " + this.game.camera.x.toFixed(2), 200, 90);
     }
-    ctx.fillStyle="#000000";
+    ctx.fillStyle = "#000000";
 
 
 }
 Enemy.prototype.move = Player.prototype.move;
-Enemy.prototype.update = function() {
+Enemy.prototype.update = function () {
     var stop_range = 2000;
     var dx = this.game.player.x - this.x;
     var dy = this.game.player.y - this.y;
@@ -947,7 +944,7 @@ Enemy.prototype.update = function() {
 
     var dx = 0;
     var dy = 0;
-    var random_input = Math.floor(Math.random()*100);
+    var random_input = Math.floor(Math.random() * 100);
     if (random_input <= 25) { dx -= 1; } //left
     else if (random_input <= 50) { dy -= 1; } //up
     else if (random_input <= 75) { dx += 1; } //right
@@ -984,18 +981,18 @@ function Bullet(game, x, y, h, a) {
 }
 
 Bullet.prototype = new Entity();
-Bullet.prototype.draw = function(ctx) {
+Bullet.prototype.draw = function (ctx) {
     var groundX = this.x - this.game.camera.x;
     var groundY = this.y - this.game.camera.y;
     var spriteX = groundX;
     var spriteY = groundY + this.h * this.heightOffset;
-    ctx.font="20px sans-serif";
-    ctx.fillStyle="#FFA500";
+    ctx.font = "20px sans-serif";
+    ctx.fillStyle = "#FFA500";
     ctx.fillText("●", spriteX, spriteY * tileYRatio);
-    ctx.font="10px sans-serif";
-    ctx.fillStyle="#000000";
+    ctx.font = "10px sans-serif";
+    ctx.fillStyle = "#000000";
 }
-Bullet.prototype.update = function() {
+Bullet.prototype.update = function () {
     var dead_range = 1000;
     var dx = this.game.player.x - this.x;
     var dy = this.game.player.y - this.y;
@@ -1083,7 +1080,7 @@ Map.prototype.draw = function (ctx) {
         if (i < 0) i += this.mapQuadrantWidth;
         var j = this.currentQuadrantY - 1;
         if (j < 0) j += this.mapQuadrantHeight;
-        ctx.filleStyle = "black";
+        ctx.fillStyle = "black";
         ctx.fillText("(" + i + "," + j + ") " + this.whatever, 10, 120);
         ctx.fillText("(" + (i + 2) + "," + (j + 2) + ")", 10, 135);
     }
@@ -1152,14 +1149,27 @@ function Quadrant(x, y, w, h, d) {
 
 Quadrant.prototype.init = function (game) {
     var attempts = Math.floor(this.width * this.height / this.density) - this.islands.length;
+    var canAdd = true;
+    var island = new TileMap(game, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
+    island.init();
     for (var i = 0; i < attempts; i++) {
-        var island = new TileMap(game, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
-        var x = this.x + Math.random() * (this.width - island.detectionRadius);
-        var y = this.y + Math.random() * (this.height - island.detectionRadius);
-        island.x = x;
-        island.y = y;
-        island.init();
-        this.islands.push(island);
+        if (canAdd) {
+            island = new TileMap(game, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
+            island.init();
+        } else {
+            canAdd = true;
+        }
+        island.x = this.x + Math.random() * (this.width - island.detectionRadius);
+        island.y = this.y + Math.random() * (this.height - island.detectionRadius);
+        for (j in this.islands) {
+            if (Math.pow(this.islands[j].x - island.x, 2) + Math.pow(this.islands[j].y - island.y, 2) <= Math.pow(this.islands[j].detectionRadius + island.detectionRadius, 2)) {
+                canAdd = false;
+                break;
+            }
+        }
+        if (canAdd) {
+            this.islands.push(island);
+        }
     }
 }
 
@@ -1271,10 +1281,10 @@ TileMap.prototype.draw = function (ctx) {
         if (this.debugTileX) {
             ctx.beginPath();
             ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
-            ctx.moveTo(this.debugTileX, this.debugTileY);
-            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2, this.debugTileY - this.tileMapHeight / 2);
-            ctx.lineTo(this.debugTileX + this.tileMapWidth, this.debugTileY);
-            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2, this.debugTileY + this.tileMapHeight / 2);
+            ctx.moveTo(this.debugTileX - this.game.camera.x, this.debugTileY - this.game.camera.y * tileYRatio);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2 - this.game.camera.x, this.debugTileY - this.game.camera.y * tileYRatio - this.tileMapHeight / 2);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth - this.game.camera.x, this.debugTileY - this.game.camera.y * tileYRatio);
+            ctx.lineTo(this.debugTileX + this.tileMapWidth / 2 - this.game.camera.x, this.debugTileY - this.game.camera.y * tileYRatio + this.tileMapHeight / 2);
             ctx.fill();
         }
 
@@ -1286,6 +1296,7 @@ TileMap.prototype.addItem = function (item, x, y) {
     this.items.push(item);
     item.x = this.x + this.mapXZero + this.tileMapWidth / 2 * (x + y);
     item.y = this.y + this.mapYZero + this.tileMapWidth / 2 * (y - x);
+    console.log(item.name + " is now at " + item.x + " " + item.y);
 }
 
 TileMap.prototype.addToGame = function () {
@@ -1334,8 +1345,8 @@ TileMap.prototype.isOverLand = function (x, y) {
         this.debugTileX = this.x + this.mapXZero + (mapX + mapY - 1) * this.tileMapWidth / 2;
         this.debugTileY = this.y + this.mapYZero + (mapY - mapX) * this.tileMapWidth / 2;
         this.game.addDebugStatement("Debug coord: (" + this.debugTileX.toFixed(2) + "," + this.debugTileY.toFixed(2) + ")");
-        this.debugTileX = this.debugTileX - this.game.camera.x;
-        this.debugTileY = (this.debugTileY - this.game.camera.y) * tileYRatio;
+        this.debugTileX = this.debugTileX;
+        this.debugTileY = (this.debugTileY) * tileYRatio;
         return true;
     } else {
         this.debugTileX = -999;
@@ -1445,9 +1456,9 @@ function Quest(game, title, dialogs, targets) {
 
 Quest.prototype.fullfilled = function () {
     for (var item in this.targets) {
-        if (!this.game.player.inventory.hasOwnProperty(item) 
+        if (!this.game.player.inventory.hasOwnProperty(item)
             || this.game.player.inventory[item] < this.targets[item])
-            return false; 
+            return false;
     }
     return true;
 }
@@ -1455,15 +1466,14 @@ Quest.prototype.fullfilled = function () {
 function NPC(game, sprite, x, y, quest) {
     Entity.call(this, game, sprite, x, y, 0);
     this.quest = quest;
-    this.game.addEntity(this);
     this.visited = false;
     this.showDialog = false;
-    this.bubble = new Entity(game, ASSET_MANAGER.getAsset("images/E.png"), x+5, y-40, 0);
+    this.bubble = ASSET_MANAGER.getAsset("images/E.png");//, x+5, y-40, 0);
 }
 
 NPC.prototype = new Entity();
 NPC.prototype.constructor = NPC;
-NPC.prototype.draw = function(ctx) {
+NPC.prototype.draw = function (ctx) {
     Entity.prototype.draw.call(this, ctx);
     if (this.showDialog) {
         console.log("Show dialog");
@@ -1472,27 +1482,29 @@ NPC.prototype.draw = function(ctx) {
             ctx.fillStyle = "rgba(0, 0, 100, 0.75)";
             drawDialogBox(ctx, horizontalOffset, 500, this.quest.dialogs['mission'].length * 20, 100, 20, 2);
             ctx.fillStyle = "#FFFFFF";
-            ctx.font="30px sans-serif";
+            ctx.font = "30px sans-serif";
             ctx.fillText(this.quest.dialogs['mission'], horizontalOffset + 50, 560);
-            ctx.font="10px sans-serif";
-            ctx.fillStyle="#000000";
+            ctx.font = "10px sans-serif";
+            ctx.fillStyle = "#000000";
         } else {
             var horizontalOffset = 500 - (this.quest.dialogs['done'].length * 12);
             ctx.fillStyle = "rgba(0, 0, 100, 0.75)";
             drawDialogBox(ctx, horizontalOffset, 500, this.quest.dialogs['done'].length * 20, 100, 20, 2);
             ctx.fillStyle = "#FFFFFF";
-            ctx.font="30px sans-serif";
+            ctx.font = "30px sans-serif";
             ctx.fillText(this.quest.dialogs['done'], horizontalOffset + 20, 560);
-            ctx.font="10px sans-serif";
-            ctx.fillStyle="#000000";
+            ctx.font = "10px sans-serif";
+            ctx.fillStyle = "#000000";
         }
     } else if (this.showBubble) {
-        Entity.prototype.draw.call(this.bubble, ctx);
+        ctx.drawImage(this.bubble, this.x + 5 - this.bubble.width / 2 - this.game.camera.x,
+                                   this.y - 40 - this.bubble.height / 2 - this.game.camera.y * tileYRatio);
     }
 
 }
 NPC.prototype.update = function () {
-    if (Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
+    this.game.addDebugStatement("NPC: " + (this.game.player.x - this.x).toFixed(2) + " " + (this.game.player.y - this.y).toFixed(2));
+    if (Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(95, 2)) {
         if (this.game.keyboardState[69]) {
             this.visited = true;
             this.game.player.quest = this.quest;
@@ -1505,7 +1517,7 @@ NPC.prototype.update = function () {
         this.showBubble = false;
         this.showDialog = false;
 
-    }   
+    }
 }
 function Cloud(game, asset) {
     Entity.call(this, game, asset, 0, 0);
@@ -1567,7 +1579,7 @@ var gameMap = [
 
 
 var ASSET_MANAGER = new AssetManager();
-var debugMode = false;
+var debugMode = true;
 var tileMapWidth = 38;
 var tileMapHeight = 20;
 var tileMapDepth = 7;
@@ -1588,7 +1600,7 @@ ASSET_MANAGER.downloadAll(function () {
     console.log(typeof (null));
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
-    var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 50, 50);
+    var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 55000, 55000);
     var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 300, 300, 30);
     engine.player = player;
     var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.jpg"));
@@ -1597,7 +1609,7 @@ ASSET_MANAGER.downloadAll(function () {
     //engine.addEntity(enemy);
     engine.player = player;
     engine.camera = new Camera(engine, player);
-    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 741, 57);
+    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 55000, 55000);
     testMap.init();
     var miniMap = new Map(engine, player);
     miniMap.initMap();
@@ -1605,8 +1617,8 @@ ASSET_MANAGER.downloadAll(function () {
     miniMap.generateMap();
     engine.addEntity(miniMap);
     engine.map = miniMap;
-    engine.quests.push(new Quest(engine, "Diamond hunter", {"mission": "Collect 3 diamonds!", "done": "Good job!"}, {"Diamond": 3}));
-    var npc1 = new NPC(engine, ASSET_MANAGER.getAsset("images/oak_p.png"), 95, 100, engine.quests[0]);
+    engine.quests.push(new Quest(engine, "Diamond hunter", { "mission": "Collect 3 diamonds!", "done": "Good job!" }, { "Diamond": 3 }));
+    testMap.addItem(new NPC(engine, ASSET_MANAGER.getAsset("images/oak_p.png"), 95, 100, engine.quests[0]), 12, 15);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 1);
