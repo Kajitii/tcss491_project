@@ -1015,7 +1015,7 @@ function Map(game, player) {
     this.minimapWidth = 100;     //pixels
     this.minimapHeight = 100;    //pixels
     this.mapQuadrantWidth = 10;  //quadrants
-    this.mapQuadrantHeight = 10; //quadrants
+    this.mapQuadrantHeight = 5; //quadrants
     this.quadrantWidth = 10000;  //pixels
     this.quadrantHeight = 10000; //pixels
     this.mapWidth = this.mapQuadrantWidth * this.quadrantWidth;
@@ -1057,19 +1057,23 @@ Map.prototype.addIsland = function (island) {
 
 Map.prototype.generateMap = function () {
     var ctx = this.minimap.getContext('2d');
-    ctx.fillStyle = "green";
+    //ctx.fillStyle = "green";
+    ctx.save();
+    ctx.scale(1 / this.scale, 1 / this.scale / tileYRatio);
     for (var j = 0; j < this.mapQuadrantHeight; j++) {
         for (var i = 0; i < this.mapQuadrantWidth; i++) {
             var q = this.quadrants[j][i];
             q.init(this.game);
             for (var k = 0; k < q.islands.length; k++) {
                 var island = q.islands[k];
-                ctx.beginPath();
-                ctx.arc(island.x / this.scale, island.y / this.scale, island.detectionRadius / this.scale, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.drawImage(island.imgCache, island.x - island.imgCache.width / 2, island.y * tileYRatio - island.imgCache.height / 2);
+                //ctx.beginPath();
+                //ctx.arc(island.x / this.scale, island.y / this.scale, island.detectionRadius / this.scale, 0, Math.PI * 2);
+                //ctx.fill();
             }
         }
     }
+    ctx.restore();
 }
 
 Map.prototype.draw = function (ctx) {
@@ -1082,12 +1086,12 @@ Map.prototype.draw = function (ctx) {
                   this.minimapWidth, this.minimapHeight,
                   minimapX, minimapY,
                   this.minimapWidth, this.minimapHeight);
+    //ctx.drawImage(this.minimap, 0, 0);
     ctx.beginPath();
     ctx.fillStyle = "red";
+    //ctx.arc(this.player.x / this.scale, this.player.y / this.scale, 1, 0, Math.PI * 2);
     ctx.arc(minimapX + this.minimapWidth / 2, minimapY + this.minimapHeight / 2, 1, 0, Math.PI * 2);
     ctx.fill();
-    ctx.beginPath();
-    ctx.arc(this.player.x / this.scale, this.player.y / this.scale, 42, 0, Math.PI * 2);
     if (debugMode) {
         var i = this.currentQuadrantX - 1;
         if (i < 0) i += this.mapQuadrantWidth;
@@ -1510,8 +1514,10 @@ NPC.prototype.draw = function (ctx) {
             ctx.fillStyle = "#000000";
         }
     } else if (this.showBubble) {
+        this.game.addDebugStatement("bubble! " + (this.x + 5 - this.bubble.width / 2).toFixed(2) + ", " + (this.y - 40 - this.bubble.height / 2).toFixed(2));
+        this.game.addDebugStatement("bubble! " + (this.x + 5 - this.bubble.width / 2 - this.game.camera.x).toFixed(2) + ", " + (this.y - 40 - this.bubble.height / 2 - this.game.camera.y).toFixed(2));
         ctx.drawImage(this.bubble, this.x + 5 - this.bubble.width / 2 - this.game.camera.x,
-                                   this.y - 40 - this.bubble.height / 2 - this.game.camera.y * tileYRatio);
+                                   (this.y - this.game.camera.y) * tileYRatio - 30 - this.bubble.height / 2);
     }
 
 }
@@ -1628,9 +1634,9 @@ ASSET_MANAGER.downloadAll(function () {
     engine.player = player;
     engine.camera = new Camera(engine, player);
     var miniMap = new Map(engine, player);
-    miniMap.initMap();
     var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), miniMap.mapWidth / 2, miniMap.mapHeight / 2);
     testMap.init();
+    miniMap.initMap();
     player.x = miniMap.mapWidth / 2;
     player.y = miniMap.mapHeight / 2;
     miniMap.addIsland(testMap);
