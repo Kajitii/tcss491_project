@@ -1009,8 +1009,11 @@ Bullet.prototype.move = Player.prototype.move;
 function Map(game, player) {
     this.game = game;
     this.player = player;
-    this.minimap = null;
+    this.minimap = null;         //minimap image
     this.scale = 100;            //real world pixels per minimap pixel
+    this.dynamicScale = 1;       //dynamically scale the minimap display, as a %
+    this.minimapWidth = 100;     //pixels
+    this.minimapHeight = 100;    //pixels
     this.mapQuadrantWidth = 10;  //quadrants
     this.mapQuadrantHeight = 10; //quadrants
     this.quadrantWidth = 10000;  //pixels
@@ -1070,11 +1073,21 @@ Map.prototype.generateMap = function () {
 }
 
 Map.prototype.draw = function (ctx) {
-    ctx.drawImage(this.minimap, 0, 0);
+    var minimapX = 0;
+    var minimapY = this.game.ctx.canvas.height - this.minimapHeight;
+    ctx.fillStyle = "turquoise";
+    ctx.fillRect(minimapX, minimapY, this.minimapWidth, this.minimapHeight);
+    ctx.drawImage(this.minimap,
+                  this.player.x / this.scale - this.minimapWidth / 2, this.player.y / this.scale - this.minimapHeight / 2,
+                  this.minimapWidth, this.minimapHeight,
+                  minimapX, minimapY,
+                  this.minimapWidth, this.minimapHeight);
     ctx.beginPath();
     ctx.fillStyle = "red";
-    ctx.arc(this.player.x / this.scale, this.player.y / this.scale, 1, 0, Math.PI * 2);
+    ctx.arc(minimapX + this.minimapWidth / 2, minimapY + this.minimapHeight / 2, 1, 0, Math.PI * 2);
     ctx.fill();
+    ctx.beginPath();
+    ctx.arc(this.player.x / this.scale, this.player.y / this.scale, 42, 0, Math.PI * 2);
     if (debugMode) {
         var i = this.currentQuadrantX - 1;
         if (i < 0) i += this.mapQuadrantWidth;
@@ -1105,8 +1118,8 @@ Map.prototype.update = function () {
     if (i < 0) i += this.mapQuadrantWidth;
     var jStart = this.currentQuadrantY - 1;
     if (jStart < 0) jStart += this.mapQuadrantHeight;
-    var iStop = i + 2;
-    var jStop = jStart + 2;
+    var iStop = Math.min(i + 2, this.quadrants[0].length - 1);
+    var jStop = Math.min(j + 2, this.quadrants.length - 1);
     for (; i <= iStop; i++) {
         for (j = jStart; j <= jStop; j++) {
             var q = this.quadrants[j % this.mapQuadrantHeight][i % this.mapQuadrantWidth];
@@ -1521,12 +1534,17 @@ NPC.prototype.update = function () {
 }
 function Cloud(game, asset) {
     Entity.call(this, game, asset, 0, 0);
+    this.parallaxFactor = -0.1;      //How many pixels it moves per pixels the camera moves.
 }
 Cloud.prototype = new Entity();
 Cloud.prototype.constructor = Cloud;
 
 Cloud.prototype.draw = function (ctx) {
-    ctx.drawImage(this.img, this.x, this.y);
+    for (var i = this.game.player.x * this.parallaxFactor % this.img.width - this.img.width; i < ctx.canvas.width; i += this.img.width) {
+        for (var j = this.game.player.y * this.parallaxFactor % this.img.height - this.img.height; j < ctx.canvas.height; j += this.img.height) {
+            ctx.drawImage(this.img, i, j);
+        }
+    }
 }
 
 var gameMap = [
@@ -1600,7 +1618,7 @@ ASSET_MANAGER.downloadAll(function () {
     console.log(typeof (null));
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
-    var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 55000, 55000);
+    var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 0, 0);
     var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 300, 300, 30);
     engine.player = player;
     var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.jpg"));
@@ -1609,10 +1627,12 @@ ASSET_MANAGER.downloadAll(function () {
     //engine.addEntity(enemy);
     engine.player = player;
     engine.camera = new Camera(engine, player);
-    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 55000, 55000);
-    testMap.init();
     var miniMap = new Map(engine, player);
     miniMap.initMap();
+    var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), miniMap.mapWidth / 2, miniMap.mapHeight / 2);
+    testMap.init();
+    player.x = miniMap.mapWidth / 2;
+    player.y = miniMap.mapHeight / 2;
     miniMap.addIsland(testMap);
     miniMap.generateMap();
     engine.addEntity(miniMap);
