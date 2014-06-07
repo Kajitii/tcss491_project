@@ -114,6 +114,7 @@ function GameEngine() {
     this.fire = false;
 
     this.quests = [];
+    this.enemies = [];
     this.debugStack = [];
 }
 
@@ -578,6 +579,7 @@ function Player(game, sprite, x, y) {
 
     this.inventory = [];
     this.quest = null;
+    this.enemyKilled = 0;
 }
 
 Player.prototype = new Entity();
@@ -840,6 +842,7 @@ Player.prototype.removeItem = function (name, n) {
 
 function Enemy(game, sprite, shadowSprite, x, y, z) {
     Entity.call(this, game, sprite, x, y, 0);
+    game.enemies.push(this);
     this.shadowImg = shadowSprite;
     this.groundHeightOffset = 10;
     this.h = z;
@@ -861,10 +864,10 @@ Enemy.prototype.constructor = Enemy;
 Enemy.prototype.draw = function (ctx) {
     var groundX = this.x - this.game.camera.x;
     var groundY = this.y - this.game.camera.y;
-    var spriteX = this.x - this.game.camera.x;
-    var spriteY = this.y - this.game.camera.y + this.h * this.heightOffset;
-    var shadowX = this.x - this.game.camera.x + this.h * this.shadowOffsetX;
-    var shadowY = this.y - this.game.camera.y + this.h * this.shadowOffsetY;
+    var spriteX = groundX;
+    var spriteY = groundY + this.h * this.heightOffset;
+    var shadowX = groundX + (this.h - this.heightOffset) * this.shadowOffsetX;
+    var shadowY = groundY + this.h * this.shadowOffsetY;
 
     //Draw the ground indicator
     var gradient = ctx.createLinearGradient(this.x, this.y, spriteX, spriteY);
@@ -935,41 +938,41 @@ Enemy.prototype.draw = function (ctx) {
 }
 Enemy.prototype.move = Player.prototype.move;
 Enemy.prototype.update = function () {
-    var stop_range = 2000;
-    var dx = this.game.player.x - this.x;
-    var dy = this.game.player.y - this.y;
-    if (dx * dx + dy * dy >= stop_range * stop_range) {
-        return;
-    }
+    // var stop_range = 2000;
+    // var dx = this.game.player.x - this.x;
+    // var dy = this.game.player.y - this.y;
+    // if (dx * dx + dy * dy >= stop_range * stop_range) {
+    //     return;
+    // }
 
-    var dx = 0;
-    var dy = 0;
-    var random_input = Math.floor(Math.random() * 100);
-    if (random_input <= 25) { dx -= 1; } //left
-    else if (random_input <= 50) { dy -= 1; } //up
-    else if (random_input <= 75) { dx += 1; } //right
-    else if (random_input <= 100) { dy += 1; } //down
+    // var dx = 0;
+    // var dy = 0;
+    // var random_input = Math.floor(Math.random() * 100);
+    // if (random_input <= 25) { dx -= 1; } //left
+    // else if (random_input <= 50) { dy -= 1; } //up
+    // else if (random_input <= 75) { dx += 1; } //right
+    // else if (random_input <= 100) { dy += 1; } //down
 
-    if (this.isFlying) {
-        //Calculate direction, velocity, and location
-        var dist = this.speed * this.game.clockTick;
-        var angle = 0;
-        if (dx !== 0 || dy !== 0) {
-            angle = Math.atan2(dy, dx);
-            if (angle < 0) angle += Math.PI * 2;
-            var da = this.a - angle;
-            if (da < 0) da += Math.PI * 2;
-            var actualDa = Math.min(this.angleSpeed, Math.abs(this.a - angle));
-            if (da < -Math.PI || (da >= 0 && da < Math.PI)) { //turn left
-                this.a -= actualDa;
-                if (this.a < 0) this.a += Math.PI * 2;
-            } else { //turn right
-                this.a += actualDa;
-                this.a %= Math.PI * 2;
-            }
-        }
-        this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
-    }
+    // if (this.isFlying) {
+    //     //Calculate direction, velocity, and location
+    //     var dist = this.speed * this.game.clockTick;
+    //     var angle = 0;
+    //     if (dx !== 0 || dy !== 0) {
+    //         angle = Math.atan2(dy, dx);
+    //         if (angle < 0) angle += Math.PI * 2;
+    //         var da = this.a - angle;
+    //         if (da < 0) da += Math.PI * 2;
+    //         var actualDa = Math.min(this.angleSpeed, Math.abs(this.a - angle));
+    //         if (da < -Math.PI || (da >= 0 && da < Math.PI)) { //turn left
+    //             this.a -= actualDa;
+    //             if (this.a < 0) this.a += Math.PI * 2;
+    //         } else { //turn right
+    //             this.a += actualDa;
+    //             this.a %= Math.PI * 2;
+    //         }
+    //     }
+    //     this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
+    // }
 }
 
 function Bullet(game, x, y, h, a) {
@@ -1625,12 +1628,12 @@ ASSET_MANAGER.downloadAll(function () {
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 0, 0);
-    var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 300, 300, 30);
+    var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50000, 25000, 30);
     engine.player = player;
     var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.jpg"));
     engine.addBackground(bg);
     engine.addEntity(player);
-    //engine.addEntity(enemy);
+    engine.addEntity(enemy);
     engine.player = player;
     engine.camera = new Camera(engine, player);
     var miniMap = new Map(engine, player);
