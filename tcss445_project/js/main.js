@@ -855,7 +855,7 @@ function Enemy(game, sprite, shadowSprite, x, y, z) {
     this.flySpeedHeight = 120;
     this.flyAcceleration = 5;
     this.angleSpeed = 3 * Math.PI / 180;
-    this.isFlying = true;
+    this.isFlying = false;
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
     this.shadowOffsetY = 0.25;  //pixels per height
@@ -865,7 +865,8 @@ function Enemy(game, sprite, shadowSprite, x, y, z) {
     this.frameHeight = 65;
     this.hp = 5;
     this.frameDelays = [0.2, 0.2, 0.2, 0.25, 0.075, 0.075, 0.075, 0.075, 0.375, 0.375]; //seconds
-    this.animation = new Animation(game, this, sprite, 1439, 1171, 72, 65, -36, -47, [0.2, 0.2, 0.2, 0.25], true);
+    //function Animation(game, entity, image, initX, initY, frameWidth, frameHeight, offsetX, offsetY, frameDelays, repeat)
+    this.animation = new Animation(game, this, sprite, 1439, 1171, 79, 65, -36, -47, [0.2, 0.2], true);
 
 }
 
