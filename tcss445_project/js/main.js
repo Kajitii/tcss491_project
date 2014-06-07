@@ -853,10 +853,18 @@ function Enemy(game, sprite, shadowSprite, x, y, z) {
     this.flySpeedHeight = 120;
     this.flyAcceleration = 5;
     this.angleSpeed = 3 * Math.PI / 180;
-    this.isFlying = true;
+    this.isFlying = false;
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
     this.shadowOffsetY = 0.25;  //pixels per height
+    this.spriteSheetOffsetX = 1439;
+    this.spriteSheetOffsetY = 1171;
+    this.frameWidth = 72;
+    this.frameHeight = 65;
+
+    this.frameDelays = [0.2, 0.2, 0.2, 0.25, 0.075, 0.075, 0.075, 0.075, 0.375, 0.375]; //seconds
+    this.animation = new Animation(game, this, sprite, 1439, 1171, 72, 65, -36, -47, [0.2, 0.2, 0.2, 0.25], true);
+
 }
 
 Enemy.prototype = new Entity();
@@ -869,8 +877,31 @@ Enemy.prototype.draw = function (ctx) {
     var shadowX = groundX + (this.h - this.heightOffset) * this.shadowOffsetX;
     var shadowY = groundY + this.h * this.shadowOffsetY;
 
+    //Draw the player shadow
+    ctx.save();
+
+    ctx.scale(1, tileYRatio);
+
+    ctx.fillStyle = "black";
+    ctx.beginPath();
+    ctx.arc(shadowX, shadowY, 13, 0, Math.PI * 2);
+    ctx.fill();
+
     //Draw the ground indicator
-    var gradient = ctx.createLinearGradient(this.x, this.y, spriteX, spriteY);
+    //Ground circle and direction
+    ctx.beginPath();
+    if (this.isFlying) {
+        ctx.strokeStyle = "rgba(0,255,0,0.5)";
+    } else {
+        ctx.strokeStyle = "rgba(255,0,0,0.5)";
+    }
+    ctx.arc(groundX, groundY, this.r, 0, Math.PI * 2);
+    ctx.moveTo(groundX, groundY);
+    ctx.lineTo(groundX + this.r * Math.cos(this.a), groundY + this.r * Math.sin(this.a));
+    ctx.stroke();
+
+    //Ground to player sprite
+    var gradient = ctx.createLinearGradient(groundX, groundY, spriteX, spriteY);
     gradient.addColorStop(0, "orange");
     gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
     ctx.strokeStyle = gradient;
@@ -878,50 +909,75 @@ Enemy.prototype.draw = function (ctx) {
     ctx.lineTo(spriteX, spriteY);
     ctx.stroke();
 
+    //Ground to player shadow
     ctx.beginPath();
-    gradient = ctx.createLinearGradient(this.x, this.y, shadowX, shadowY);
+    gradient = ctx.createLinearGradient(groundX, groundY, shadowX, shadowY);
     gradient.addColorStop(0, "blue");
-    gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
+    gradient.addColorStop(1, "rgba(0, 0, 255, 0.10)");
     ctx.strokeStyle = gradient;
     ctx.moveTo(groundX, groundY);
     ctx.lineTo(shadowX, shadowY);
     ctx.stroke();
 
-    var r = 10;
-    ctx.beginPath();
-    if (this.isFlying) {
-        ctx.strokeStyle = "rgba(0,255,0,0.5)";
-    } else {
-        ctx.strokeStyle = "rgba(255,0,0,0.5)";
-    }
-    ctx.arc(spriteX, spriteY, r, 0, Math.PI * 2);
-    ctx.moveTo(spriteX, spriteY);
-    ctx.lineTo(spriteX + r * Math.cos(this.a), spriteY + r * Math.sin(this.a));
-    ctx.stroke();
-
-    //Draw the player shadow
-    ctx.drawImage(this.shadowImg,
-                  0, 0,
-                  this.shadowImg.width, this.shadowImg.height,
-                  shadowX, shadowY,
-                  this.shadowImg.width, this.shadowImg.height);
+    ctx.restore();
 
     //Draw the player sprite
-    ctx.drawImage(this.img,
-                  0, 0,
-                  this.img.width, this.img.height,
-                  spriteX, spriteY,
-                  this.img.width, this.img.height);
-    ctx.fillStyle = "#FF0000";
-    ctx.font = "30px sans-serif";
-    if (this.game.player.h === this.h) {
-        ctx.fillText("●", spriteX - 5, spriteY - 5);
-    } else if (this.game.player.h > this.h) {
-        ctx.fillText("▼", spriteX - 5, spriteY - 5);
-    } else if (this.game.player.h < this.h) {
-        ctx.fillText("▲", spriteX - 5, spriteY - 5);
-    }
-    ctx.font = "10px sans-serif";
+    this.animation.draw(ctx);
+
+
+    //Draw the ground indicator
+    // var gradient = ctx.createLinearGradient(this.x, this.y, spriteX, spriteY);
+    // gradient.addColorStop(0, "orange");
+    // gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
+    // ctx.strokeStyle = gradient;
+    // ctx.moveTo(groundX, groundY);
+    // ctx.lineTo(spriteX, spriteY);
+    // ctx.stroke();
+
+    // ctx.beginPath();
+    // gradient = ctx.createLinearGradient(this.x, this.y, shadowX, shadowY);
+    // gradient.addColorStop(0, "blue");
+    // gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
+    // ctx.strokeStyle = gradient;
+    // ctx.moveTo(groundX, groundY);
+    // ctx.lineTo(shadowX, shadowY);
+    // ctx.stroke();
+
+    // var r = 10;
+    // ctx.beginPath();
+    // if (this.isFlying) {
+    //     ctx.strokeStyle = "rgba(0,255,0,0.5)";
+    // } else {
+    //     ctx.strokeStyle = "rgba(255,0,0,0.5)";
+    // }
+    // ctx.arc(spriteX, spriteY, r, 0, Math.PI * 2);
+    // ctx.moveTo(spriteX, spriteY);
+    // ctx.lineTo(spriteX + r * Math.cos(this.a), spriteY + r * Math.sin(this.a));
+    // ctx.stroke();
+
+    // //Draw the player shadow
+    // ctx.drawImage(this.shadowImg,
+    //               0, 0,
+    //               this.shadowImg.width, this.shadowImg.height,
+    //               shadowX, shadowY,
+    //               this.shadowImg.width, this.shadowImg.height);
+
+    // //Draw the player sprite
+    // ctx.drawImage(this.img,
+    //               0, 0,
+    //               this.img.width, this.img.height,
+    //               spriteX, spriteY,
+    //               this.img.width, this.img.height);
+    // ctx.fillStyle = "#FF0000";
+    // ctx.font = "30px sans-serif";
+    // if (this.game.player.h === this.h) {
+    //     ctx.fillText("●", spriteX - 5, spriteY - 5);
+    // } else if (this.game.player.h > this.h) {
+    //     ctx.fillText("▼", spriteX - 5, spriteY - 5);
+    // } else if (this.game.player.h < this.h) {
+    //     ctx.fillText("▲", spriteX - 5, spriteY - 5);
+    // }
+    // ctx.font = "10px sans-serif";
 
 
     if (debugMode) {
@@ -938,41 +994,42 @@ Enemy.prototype.draw = function (ctx) {
 }
 Enemy.prototype.move = Player.prototype.move;
 Enemy.prototype.update = function () {
-    // var stop_range = 2000;
-    // var dx = this.game.player.x - this.x;
-    // var dy = this.game.player.y - this.y;
-    // if (dx * dx + dy * dy >= stop_range * stop_range) {
-    //     return;
-    // }
+    this.animation.update();
+    var stop_range = 2000;
+    var dx = this.game.player.x - this.x;
+    var dy = this.game.player.y - this.y;
+    if (dx * dx + dy * dy >= stop_range * stop_range) {
+        return;
+    }
 
-    // var dx = 0;
-    // var dy = 0;
-    // var random_input = Math.floor(Math.random() * 100);
-    // if (random_input <= 25) { dx -= 1; } //left
-    // else if (random_input <= 50) { dy -= 1; } //up
-    // else if (random_input <= 75) { dx += 1; } //right
-    // else if (random_input <= 100) { dy += 1; } //down
+    var dx = 0;
+    var dy = 0;
+    var random_input = Math.floor(Math.random() * 100);
+    if (random_input <= 25) { dx -= 1; } //left
+    else if (random_input <= 50) { dy -= 1; } //up
+    else if (random_input <= 75) { dx += 1; } //right
+    else if (random_input <= 100) { dy += 1; } //down
 
-    // if (this.isFlying) {
-    //     //Calculate direction, velocity, and location
-    //     var dist = this.speed * this.game.clockTick;
-    //     var angle = 0;
-    //     if (dx !== 0 || dy !== 0) {
-    //         angle = Math.atan2(dy, dx);
-    //         if (angle < 0) angle += Math.PI * 2;
-    //         var da = this.a - angle;
-    //         if (da < 0) da += Math.PI * 2;
-    //         var actualDa = Math.min(this.angleSpeed, Math.abs(this.a - angle));
-    //         if (da < -Math.PI || (da >= 0 && da < Math.PI)) { //turn left
-    //             this.a -= actualDa;
-    //             if (this.a < 0) this.a += Math.PI * 2;
-    //         } else { //turn right
-    //             this.a += actualDa;
-    //             this.a %= Math.PI * 2;
-    //         }
-    //     }
-    //     this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
-    // }
+    if (this.isFlying) {
+        //Calculate direction, velocity, and location
+        var dist = this.speed * this.game.clockTick;
+        var angle = 0;
+        if (dx !== 0 || dy !== 0) {
+            angle = Math.atan2(dy, dx);
+            if (angle < 0) angle += Math.PI * 2;
+            var da = this.a - angle;
+            if (da < 0) da += Math.PI * 2;
+            var actualDa = Math.min(this.angleSpeed, Math.abs(this.a - angle));
+            if (da < -Math.PI || (da >= 0 && da < Math.PI)) { //turn left
+                this.a -= actualDa;
+                if (this.a < 0) this.a += Math.PI * 2;
+            } else { //turn right
+                this.a += actualDa;
+                this.a %= Math.PI * 2;
+            }
+        }
+        this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
+    }
 }
 
 function Bullet(game, x, y, h, a) {
@@ -1628,7 +1685,7 @@ ASSET_MANAGER.downloadAll(function () {
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 0, 0);
-    var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/enemy.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50000, 25000, 30);
+    var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50000, 25000, 30);
     engine.player = player;
     var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.jpg"));
     engine.addBackground(bg);
