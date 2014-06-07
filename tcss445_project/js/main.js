@@ -920,11 +920,23 @@ Enemy.prototype.draw = function (ctx) {
     ctx.moveTo(groundX, groundY);
     ctx.lineTo(shadowX, shadowY);
     ctx.stroke();
-
+    
     ctx.restore();
 
     //Draw the player sprite
     this.animation.draw(ctx);
+
+    ctx.save();
+    ctx.fillStyle = "#FF0000";
+    ctx.font = "30px sans-serif";
+    if (Math.abs(this.game.player.h - this.h) <= 20)  {
+        ctx.fillText("●", spriteX, spriteY * tileYRatio - 38);
+    } else if (this.game.player.h > this.h) {
+        ctx.fillText("▼", spriteX, spriteY * tileYRatio - 38);
+    } else if (this.game.player.h < this.h) {
+        ctx.fillText("▲", spriteX, spriteY * tileYRatio - 38);
+    }
+    ctx.restore();
 
     if (debugMode) {
         ctx.fillText("X: " + this.x.toFixed(2), 200, 15);
@@ -1027,7 +1039,9 @@ Bullet.prototype.update = function () {
         var y2 = this.game.enemies[i].y;
         var r1 = this.r;
         var r2 = this.game.enemies[i].r;
-        if ((x1-x2) * (x1-x2) + (y1-y2) * (y1-y2) < (r1+r2) * (r1+r2)) {
+        var h1 = this.h;
+        var h2 = this.game.enemies[i].h;
+        if (Math.abs(h1 - h2) <= 20 && (x1-x2) * (x1-x2) + (y1-y2) * (y1-y2) < (r1+r2) * (r1+r2)) {
             this.game.enemies[i].hit();
             this.removeFromGame();
         }
