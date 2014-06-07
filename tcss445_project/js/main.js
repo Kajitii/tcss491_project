@@ -656,14 +656,15 @@ Player.prototype.draw = function (ctx) {
         ctx.fillText(string, 10, 90);
         ctx.fillText("Misc: " + Math.round(this.a * 4 / Math.PI) % 8, 10, 105);
         ctx.fillText("Quest: ", 10, 185);
+        var i = 230;
         if (this.quest) {
             ctx.fillText(this.quest.title, 10, 200);
             ctx.fillText("Requirements: ", 10, 215);
-            var i = 230;
             for (var item in this.quest.targets) {
                 ctx.fillText(item + ": " + this.quest.targets[item], 30, i);
                 i += 15;
             }
+            i += 15;
             ctx.fillText("Fullfilled: " + this.quest.fullfilled(), 10, i);
         } else {
             ctx.fillText("Null", 10, 200);
@@ -843,6 +844,7 @@ Player.prototype.removeItem = function (name, n) {
 function Enemy(game, sprite, shadowSprite, x, y, z) {
     Entity.call(this, game, sprite, x, y, 0);
     game.enemies.push(this);
+    this.r = 20;
     this.shadowImg = shadowSprite;
     this.groundHeightOffset = 10;
     this.h = z;
@@ -853,7 +855,7 @@ function Enemy(game, sprite, shadowSprite, x, y, z) {
     this.flySpeedHeight = 120;
     this.flyAcceleration = 5;
     this.angleSpeed = 3 * Math.PI / 180;
-    this.isFlying = false;
+    this.isFlying = true;
     this.heightOffset = -0.65; //pixels per height
     this.shadowOffsetX = 0.5; //pixels per height
     this.shadowOffsetY = 0.25;  //pixels per height
@@ -861,7 +863,7 @@ function Enemy(game, sprite, shadowSprite, x, y, z) {
     this.spriteSheetOffsetY = 1171;
     this.frameWidth = 72;
     this.frameHeight = 65;
-
+    this.hp = 5;
     this.frameDelays = [0.2, 0.2, 0.2, 0.25, 0.075, 0.075, 0.075, 0.075, 0.375, 0.375]; //seconds
     this.animation = new Animation(game, this, sprite, 1439, 1171, 72, 65, -36, -47, [0.2, 0.2, 0.2, 0.25], true);
 
@@ -924,62 +926,6 @@ Enemy.prototype.draw = function (ctx) {
     //Draw the player sprite
     this.animation.draw(ctx);
 
-
-    //Draw the ground indicator
-    // var gradient = ctx.createLinearGradient(this.x, this.y, spriteX, spriteY);
-    // gradient.addColorStop(0, "orange");
-    // gradient.addColorStop(0.7, "rgba(255, 165, 0, 0.0)");
-    // ctx.strokeStyle = gradient;
-    // ctx.moveTo(groundX, groundY);
-    // ctx.lineTo(spriteX, spriteY);
-    // ctx.stroke();
-
-    // ctx.beginPath();
-    // gradient = ctx.createLinearGradient(this.x, this.y, shadowX, shadowY);
-    // gradient.addColorStop(0, "blue");
-    // gradient.addColorStop(1, "rgba(255, 165, 0, 0.0)");
-    // ctx.strokeStyle = gradient;
-    // ctx.moveTo(groundX, groundY);
-    // ctx.lineTo(shadowX, shadowY);
-    // ctx.stroke();
-
-    // var r = 10;
-    // ctx.beginPath();
-    // if (this.isFlying) {
-    //     ctx.strokeStyle = "rgba(0,255,0,0.5)";
-    // } else {
-    //     ctx.strokeStyle = "rgba(255,0,0,0.5)";
-    // }
-    // ctx.arc(spriteX, spriteY, r, 0, Math.PI * 2);
-    // ctx.moveTo(spriteX, spriteY);
-    // ctx.lineTo(spriteX + r * Math.cos(this.a), spriteY + r * Math.sin(this.a));
-    // ctx.stroke();
-
-    // //Draw the player shadow
-    // ctx.drawImage(this.shadowImg,
-    //               0, 0,
-    //               this.shadowImg.width, this.shadowImg.height,
-    //               shadowX, shadowY,
-    //               this.shadowImg.width, this.shadowImg.height);
-
-    // //Draw the player sprite
-    // ctx.drawImage(this.img,
-    //               0, 0,
-    //               this.img.width, this.img.height,
-    //               spriteX, spriteY,
-    //               this.img.width, this.img.height);
-    // ctx.fillStyle = "#FF0000";
-    // ctx.font = "30px sans-serif";
-    // if (this.game.player.h === this.h) {
-    //     ctx.fillText("●", spriteX - 5, spriteY - 5);
-    // } else if (this.game.player.h > this.h) {
-    //     ctx.fillText("▼", spriteX - 5, spriteY - 5);
-    // } else if (this.game.player.h < this.h) {
-    //     ctx.fillText("▲", spriteX - 5, spriteY - 5);
-    // }
-    // ctx.font = "10px sans-serif";
-
-
     if (debugMode) {
         ctx.fillText("X: " + this.x.toFixed(2), 200, 15);
         ctx.fillText("Y: " + this.y.toFixed(2), 200, 30);
@@ -987,8 +933,8 @@ Enemy.prototype.draw = function (ctx) {
         ctx.fillText("A: " + (this.a * 180 / Math.PI).toFixed(2) + "\u00B0", 200, 60);
         ctx.fillText("S: " + this.speed.toFixed(2), 200, 75);
         ctx.fillText("Misc: " + this.x.toFixed(2) + " " + this.game.camera.actualX.toFixed(2) + " " + this.game.camera.x.toFixed(2), 200, 90);
+        ctx.fillText("HP: " + this.hp, 200, 105);
     }
-    ctx.fillStyle = "#000000";
 
 
 }
@@ -1030,6 +976,16 @@ Enemy.prototype.update = function () {
         }
         this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
     }
+    if (this.hp <= 0) {
+        this.removeFromGame();
+        console.log("DEAD");
+        this.game.player.addItem("Enemy", 1);
+    }
+
+}
+
+Enemy.prototype.hit = function () {
+    this.hp--;
 }
 
 function Bullet(game, x, y, h, a) {
@@ -1038,6 +994,7 @@ function Bullet(game, x, y, h, a) {
     this.a = a;
     this.speed = 700;
     this.heightOffset = -0.65; //pixels per height
+    this.r = 5;
 }
 
 Bullet.prototype = new Entity();
@@ -1062,6 +1019,18 @@ Bullet.prototype.update = function () {
     else {
         var dist = this.speed * this.game.clockTick;
         this.move(dist * Math.cos(this.a), dist * Math.sin(this.a));
+    }
+    for (var i = 0; i < this.game.enemies.length; i++) {
+        var x1 = this.x;
+        var y1 = this.y;
+        var x2 = this.game.enemies[i].x;
+        var y2 = this.game.enemies[i].y;
+        var r1 = this.r;
+        var r2 = this.game.enemies[i].r;
+        if ((x1-x2) * (x1-x2) + (y1-y2) * (y1-y2) < (r1+r2) * (r1+r2)) {
+            this.game.enemies[i].hit();
+            this.removeFromGame();
+        }
     }
 }
 Bullet.prototype.move = Player.prototype.move;
@@ -1685,7 +1654,7 @@ ASSET_MANAGER.downloadAll(function () {
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 0, 0);
-    var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50000, 25000, 30);
+    var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50100, 25000, 30);
     engine.player = player;
     var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.jpg"));
     engine.addBackground(bg);
@@ -1703,7 +1672,7 @@ ASSET_MANAGER.downloadAll(function () {
     miniMap.generateMap();
     engine.addEntity(miniMap);
     engine.map = miniMap;
-    engine.quests.push(new Quest(engine, "Diamond hunter", { "mission": "Collect 3 diamonds!", "done": "Good job!" }, { "Diamond": 3 }));
+    engine.quests.push(new Quest(engine, "Diamond hunter", { "mission": "Collect 3 diamonds and kill 1 enemy!", "done": "Good job!" }, { "Diamond": 3, "Enemy": 1}));
     testMap.addItem(new NPC(engine, ASSET_MANAGER.getAsset("images/oak_p.png"), 95, 100, engine.quests[0]), 12, 15);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
     testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
