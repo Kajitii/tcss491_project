@@ -936,6 +936,9 @@ Enemy.prototype.draw = function (ctx) {
     } else if (this.game.player.h < this.h) {
         ctx.fillText("▲", spriteX, spriteY * tileYRatio - 38);
     }
+    ctx.fillStyle = "#000000";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("HP: "+this.hp, spriteX + 30, spriteY * tileYRatio - 38)
     ctx.restore();
 
     if (debugMode) {
