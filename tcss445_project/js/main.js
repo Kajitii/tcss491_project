@@ -1058,10 +1058,10 @@ function Map(game, player) {
     this.minimap = null;         //minimap image
     this.scale = 100;            //real world pixels per minimap pixel
     this.dynamicScale = 1;       //dynamically scale the minimap display, as a %
-    this.minimapWidth = 100;     //pixels
-    this.minimapHeight = 100;    //pixels
+    this.minimapWidth = 200;     //pixels
+    this.minimapHeight = 200;    //pixels
     this.mapQuadrantWidth = 10;  //quadrants
-    this.mapQuadrantHeight = 5; //quadrants
+    this.mapQuadrantHeight = 10; //quadrants
     this.quadrantWidth = 10000;  //pixels
     this.quadrantHeight = 10000; //pixels
     this.mapWidth = this.mapQuadrantWidth * this.quadrantWidth;
@@ -1125,7 +1125,10 @@ Map.prototype.generateMap = function () {
 Map.prototype.draw = function (ctx) {
     var minimapX = 0;
     var minimapY = this.game.ctx.canvas.height - this.minimapHeight;
-    ctx.fillStyle = "turquoise";
+    ctx.strokeStyle = "black";
+    ctx.fillStyle = "darkblue";
+    ctx.rect(minimapX, minimapY, this.minimapWidth, this.minimapHeight);
+    ctx.stroke();
     ctx.fillRect(minimapX, minimapY, this.minimapWidth, this.minimapHeight);
     ctx.drawImage(this.minimap,
                   this.player.x / this.scale - this.minimapWidth / 2, this.player.y / this.scale - this.minimapHeight / 2,
@@ -1212,18 +1215,14 @@ function Quadrant(x, y, w, h, d) {
 
 Quadrant.prototype.init = function (game) {
     var attempts = Math.floor(this.width * this.height / this.density) - this.islands.length;
-    var canAdd = true;
-    var island = new TileMap(game, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
-    island.init();
+    var canAdd = false;
+    var island = this.createRandomIsland(game);
     for (var i = 0; i < attempts; i++) {
         if (canAdd) {
-            island = new TileMap(game, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
-            island.init();
+            island = this.createRandomIsland(game);
         } else {
             canAdd = true;
         }
-        island.x = this.x + Math.random() * (this.width - island.detectionRadius);
-        island.y = this.y + Math.random() * (this.height - island.detectionRadius);
         for (j in this.islands) {
             if (Math.pow(this.islands[j].x - island.x, 2) + Math.pow(this.islands[j].y - island.y, 2) <= Math.pow(this.islands[j].detectionRadius + island.detectionRadius, 2)) {
                 canAdd = false;
@@ -1234,6 +1233,17 @@ Quadrant.prototype.init = function (game) {
             this.islands.push(island);
         }
     }
+}
+
+Quadrant.prototype.createRandomIsland = function (game) {
+    var island = new TileMap(game, ASSET_MANAGER.getAsset("images/map_tiles.png"), 0, 0);
+    island.x = this.x + Math.random() * (this.width - island.detectionRadius);
+    island.y = this.y + Math.random() * (this.height - island.detectionRadius);
+    island.init();
+    if (Math.random() >= 0.50) {
+        island.addItem(new Item(game, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 2, 2);
+    }
+    return island;
 }
 
 
@@ -1361,7 +1371,7 @@ TileMap.prototype.constructor = TileMap;
 TileMap.prototype.init = function () {
     this.generateMap();
     this.drawMap();
-    this.addItem(new Item(this.game, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 2, 2);
+    this.addItems();
 }
 
 //Randomly generate a new map.
@@ -1419,6 +1429,10 @@ TileMap.prototype.drawMap = function () {
     this.mapYZero = (-(this.mapData.length + this.mapData[0].length) / 2 + this.mapData[0].length) / 2 * this.tileMapWidth;
 }
 
+TileMap.prototype.addItems = function () {
+    //either randomly generate goods or do nothing and be overridden.
+}
+
 TileMap.prototype.draw = function (ctx) {
     ctx.drawImage(this.imgCache,
                   this.x - this.game.camera.x - this.imgCache.width / 2,
@@ -1464,6 +1478,7 @@ TileMap.prototype.addItem = function (item, x, y) {
     this.items.push(item);
     item.x = this.x + this.mapXZero + this.tileMapWidth / 2 * (x + y);
     item.y = this.y + this.mapYZero + this.tileMapWidth / 2 * (y - x);
+    console.log(item.x + " " + this.x + " " + this.mapXZero + " " + this.tileMapWidth + " " + x);
     console.log(item.name + " is now at " + item.x + " " + item.y);
 }
 
@@ -1531,14 +1546,40 @@ function TestMap(game, asset, x, y) {
 TestMap.prototype = new TileMap();
 TestMap.prototype.constructor = TestMap;
 
-TestMap.prototype.init = function () {
-    this.generateMap();
-    this.drawMap();
-    this.game.addBackground(this);
-}
-
 TestMap.prototype.generateMap = function () {
     this.mapData = gameMap;
+}
+
+TestMap.prototype.addItems = function () {
+    this.addItem(new NPC(this.game, ASSET_MANAGER.getAsset("images/oak_p.png"), 95, 100, this.game.quests[0]), 12, 15);
+    this.addItem(new NPC(this.game, ASSET_MANAGER.getAsset("images/oak_p.png"), 95, 100, this.game.quests[1]), 20, 35);
+}
+
+function MoonMap(game, asset, x, y) {
+    TileMap.call(this, game, asset, x, y);
+}
+MoonMap.prototype = new TileMap();
+MoonMap.prototype.constructor = MoonMap;
+
+MoonMap.prototype.generateMap = function () {
+    this.mapData = [
+        [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x00000, 0x00000, 0x00000],
+        [0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000, 0x00000, 0x00000],
+        [0x00000, 0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000, 0x00000],
+        [0x00000, 0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000, 0x00000],
+        [0x00000, 0x00000, 0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000],
+        [0x00000, 0x00000, 0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000],
+        [0x00000, 0x00000, 0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000],
+        [0x00000, 0x00000, 0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000],
+        [0x00000, 0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000, 0x00000],
+        [0x00000, 0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000, 0x00000],
+        [0x00000, 0x00000, 0x10000, 0x10000, 0x10000, 0x10000, 0x00000, 0x00000],
+        [0x10000, 0x10000, 0x10000, 0x10000, 0x10000, 0x00000, 0x00000, 0x00000]
+    ];
+}
+
+MoonMap.prototype.addItems = function () {
+    this.addItem(new Item(this.game, ASSET_MANAGER.getAsset("images/moon.png"), "Moon Jewel", 0, 0), 4, 6);
 }
 
 
@@ -1608,7 +1649,7 @@ Item.prototype.draw = function (ctx) {
 }
 
 Item.prototype.update = function () {
-    if (Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2)) {
+    if (Math.pow(this.game.player.x - this.x, 2) + Math.pow(this.game.player.y - this.y, 2) <= Math.pow(19, 2) && this.game.player.h <= 10) {
         this.collected = true;
         this.dispose = true;
         this.game.player.addItem(this.name);
@@ -1754,7 +1795,7 @@ var gameMap = [
 
 
 var ASSET_MANAGER = new AssetManager();
-var debugMode = true;
+var debugMode = false;
 var tileMapWidth = 38;
 var tileMapHeight = 20;
 var tileMapDepth = 7;
@@ -1767,6 +1808,7 @@ ASSET_MANAGER.queueDownload("images/map_tiles.png");
 ASSET_MANAGER.queueDownload("images/sky_bg.jpg");
 ASSET_MANAGER.queueDownload("images/enemy.png");
 ASSET_MANAGER.queueDownload("images/diamond.png");
+ASSET_MANAGER.queueDownload("images/moon.png");
 ASSET_MANAGER.queueDownload("images/oak_p.png");
 ASSET_MANAGER.queueDownload("images/E.png");
 //Pokemon Mystery Dungeon sprite sheet
@@ -1776,29 +1818,34 @@ ASSET_MANAGER.downloadAll(function () {
     var engine = new GameEngine();
     engine.init(document.getElementById("gameWorld").getContext("2d"));
     var player = new Player(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), 0, 0);
-    var enemy = new Enemy(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50100, 25000, 30);
+    var enemy1 = new Enemy(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50100, 50000, 30);
+    var enemy2 = new Enemy(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 49900, 50000, 40);
+    var enemy3 = new Enemy(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 50000, 50100, 50);
+    var enemy4 = new Enemy(engine, ASSET_MANAGER.getAsset("images/PMD_sprites.png"), ASSET_MANAGER.getAsset("images/test_shadow.png"), 49900, 49900, 70);
     engine.player = player;
     var bg = new Cloud(engine, ASSET_MANAGER.getAsset("images/sky_bg.jpg"));
     engine.addBackground(bg);
     engine.addEntity(player);
-    engine.addEntity(enemy);
+    engine.addEntity(enemy1);
+    engine.addEntity(enemy2);
+    engine.addEntity(enemy3);
+    engine.addEntity(enemy4);
     engine.player = player;
     engine.camera = new Camera(engine, player);
+    engine.quests.push(new Quest(engine, "Diamond hunter", { "mission": "Collect 3 diamonds and kill 1 enemy!", "done": "Good job!" }, { "Diamond": 3, "Enemy": 1 }));
+    engine.quests.push(new Quest(engine, "Jewel seeker", { "mission": "Find the moon jewel in the northwest!", "done": "Now we shall be safe..." }, { "Moon Jewel": 1 }));
     var miniMap = new Map(engine, player);
     var testMap = new TestMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), miniMap.mapWidth / 2, miniMap.mapHeight / 2);
     testMap.init();
+    var moonMap = new MoonMap(engine, ASSET_MANAGER.getAsset("images/map_tiles.png"), 30000, 30000);
+    moonMap.init();
     miniMap.initMap();
     player.x = miniMap.mapWidth / 2;
     player.y = miniMap.mapHeight / 2;
     miniMap.addIsland(testMap);
+    miniMap.addIsland(moonMap);
     miniMap.generateMap();
     engine.addEntity(miniMap);
     engine.map = miniMap;
-    engine.quests.push(new Quest(engine, "Diamond hunter", { "mission": "Collect 3 diamonds and kill 1 enemy!", "done": "Good job!" }, { "Diamond": 3, "Enemy": 1}));
-    testMap.addItem(new NPC(engine, ASSET_MANAGER.getAsset("images/oak_p.png"), 95, 100, engine.quests[0]), 12, 15);
-    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 1, 0);
-    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 0);
-    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 1);
-    testMap.addItem(new Item(engine, ASSET_MANAGER.getAsset("images/diamond.png"), "Diamond", 0, 0), 0, 2);
     engine.start();
 });
